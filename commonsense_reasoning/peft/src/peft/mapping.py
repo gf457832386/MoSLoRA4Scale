@@ -173,8 +173,8 @@ def _prepare_bottleneck_config(peft_config, model_config):
     return peft_config
     
 
-
-def get_peft_model(model, peft_config):
+#功能：输入给定的模型与配置，返回一个peft对象
+def get_peft_model(model, peft_config):   
     """
     Returns a Peft model object from a model and a config.
 
@@ -199,4 +199,5 @@ def get_peft_model(model, peft_config):
             peft_config = _prepare_lora_config(peft_config, model_config)
     else:
         peft_config = _prepare_prompt_learning_config(peft_config, model_config)
-    return MODEL_TYPE_TO_PEFT_MODEL_MAPPING[peft_config.task_type](model, peft_config)
+    return MODEL_TYPE_TO_PEFT_MODEL_MAPPING[peft_config.task_type](model, peft_config)  #MODEL_TYPE_TO_PEFT_MODEL_MAPPING 是一个字典，映射任务类型到相应的 PEFT 模型类。
+
