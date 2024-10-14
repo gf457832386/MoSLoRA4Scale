@@ -99,7 +99,7 @@ class PeftModel(PushToHubMixin, torch.nn.Module):
                 Additional keyword arguments passed along to the `push_to_hub` method.
         """
         if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
+            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")                                                                                                                             
         os.makedirs(save_directory, exist_ok=True)
 
         # save only the trainable weights
@@ -491,7 +491,7 @@ class PeftModelForSequenceClassification(PeftModel):
                 attentions=outputs.attentions,
             )
 
-
+#执行这个函数
 class PeftModelForCausalLM(PeftModel):
     """
     Peft model for Causal LM
@@ -623,7 +623,7 @@ class PeftModelForCausalLM(PeftModel):
                     (prefix_attention_mask, model_kwargs["attention_mask"]), dim=1
                 )
 
-            if model_kwargs["past_key_values"] is None and self.peft_config.peft_type == PeftType.PREFIX_TUNING:
+            if model_kwargs["past_key_values"] is None and self.peft_config.peft_type == PeftType.PREFIX_TUNING:  #如果是前缀调优
                 past_key_values = self.get_prompt(batch_size=model_kwargs["input_ids"].shape[0])
                 if self.base_model_torch_dtype is not None:
                     # handle the case for Bloom where it outputs tuple of tuples
@@ -641,15 +641,15 @@ class PeftModelForCausalLM(PeftModel):
                         )
                         
                 model_kwargs["past_key_values"] = past_key_values
-            else:
-                if model_kwargs["past_key_values"] is None:
+            else:  #非前缀调优的情况：获得prompt并拼接embeding
+                if model_kwargs["past_key_values"] is None:  #没有前缀历史值可以用
                     inputs_embeds = self.word_embeddings(model_kwargs["input_ids"])
                     prompts = self.get_prompt(batch_size=model_kwargs["input_ids"].shape[0])
                     prompts = prompts.to(inputs_embeds.dtype)
                     model_kwargs["inputs_embeds"] = torch.cat((prompts, inputs_embeds), dim=1)
-                    model_kwargs["input_ids"] = None
+                    model_kwargs["input_ids"] = None   
 
-        return model_kwargs
+        return model_kwargs  #更新后的 model_kwargs，它包含了用于文本生成的完整输入，包括前缀和处理后的注意力掩码等
 
 
 class PeftModelForSeq2SeqLM(PeftModel):

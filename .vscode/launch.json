@@ -1,0 +1,33 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python 调试程序: 当前文件",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--base_model", "yahma/llama-7b-hf",
+                "--data_path", "ft-training_set/commonsense_170k.json",
+                "--mask_file", "peft/src/peft/tuners/connectWeight.txt",
+                "--output_dir", "trained_models/moslora-r16-a32-3e4",
+                "--batch_size", "16",
+                "--micro_batch_size", "4",
+                "--num_epochs", "3",
+                "--learning_rate", "3e-4",
+                "--cutoff_len", "256",
+                "--val_set_size", "120",
+                "--adapter_name", "lora",
+                "--lora_r", "16",
+                "--lora_alpha", "32",
+                "--use_moslora",
+                "--use_scalelora",
+                "--target_modules", "[\"q_proj\", \"k_proj\", \"v_proj\", \"up_proj\", \"down_proj\"]"
+            ]
+        }
+    ]
+}

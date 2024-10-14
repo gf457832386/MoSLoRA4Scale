@@ -1,13 +1,12 @@
 #!/bin/sh
 
-rank=16
+rank=4
 alpha=32
-gpuid=3
-timestamp=$(date +"%m%d%H")
+gpuid=4   
 
-model_p_or_n=yahma/llama-7b-hf
-model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
-results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
+model_p_or_n=yahma/llama-7b-hf 
+model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid  
+results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid
 
 
 mkdir -p $model_path

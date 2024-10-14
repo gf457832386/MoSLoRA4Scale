@@ -85,7 +85,8 @@ class LoraConfig(PeftConfig):
     # expert_A: int = field(default=1, metadata={"help": "expert for lora A"})
     # expert_B: int = field(default=1, metadata={"help": "expert for lora B"})
     lora_use_mixer: bool=field(default=False, metadata={"help": "whether to use mixer"})
-
+    lora_use_scale: bool=field(default=False, metadata={"help": "whether to use scale"})
+    lora_mask_file: str = field(default='', metadata={"help": "Path to the mask file for LoRA layers"}) # add by phoebe
     def __post_init__(self):
         self.peft_type = PeftType.LORA
 
@@ -118,7 +119,7 @@ class LoraModel(torch.nn.Module):
         super().__init__()
         self.peft_config = config
         self.model = model
-        self._find_and_replace()
+        self._find_and_replace()  #执行这一步 跳到下面的函数里
         mark_only_lora_as_trainable(self.model, self.peft_config.bias)
         self.forward = self.model.forward
 
@@ -141,6 +142,8 @@ class LoraModel(torch.nn.Module):
             # "expert_A": self.peft_config.expert_A,
             # "expert_B": self.peft_config.expert_B,
             "lora_use_mixer": self.peft_config.lora_use_mixer,
+            "lora_use_scale": self.peft_config.lora_use_scale,  #是否自适应
+            "lora_mask_file":self.peft_config.lora_mask_file, #自适应掩码矩阵路径
         }
         key_list = [key for key, _ in self.model.named_modules()]
         for key in key_list:
@@ -153,7 +156,7 @@ class LoraModel(torch.nn.Module):
                     is_target_modules_in_base_model = True
                 parent, target, target_name = self._get_submodules(key)
                 bias = target.bias is not None
-                if loaded_in_8bit and isinstance(target, bnb.nn.Linear8bitLt):
+                if loaded_in_8bit and isinstance(target, bnb.nn.Linear8bitLt):  #处理8位权重的线性层
                     kwargs.update(
                         {
                             "has_fp16_weights": target.state.has_fp16_weights,
@@ -167,9 +170,9 @@ class LoraModel(torch.nn.Module):
                     else:
                         kwargs.update({"enable_lora": self.peft_config.enable_lora})
                         new_module = MergedLinear8bitLt(target.in_features, target.out_features, bias=bias, **kwargs)
-                elif isinstance(target, torch.nn.Linear) and self.peft_config.enable_lora is None:
-                    new_module = Linear(target.in_features, target.out_features, bias=bias, **kwargs)
-                elif self.peft_config.enable_lora is not None:
+                elif isinstance(target, torch.nn.Linear) and self.peft_config.enable_lora is None: #处理标准线性层且没有启用lora
+                    new_module = Linear(target.in_features, target.out_features, bias=bias, **kwargs)   
+                elif self.peft_config.enable_lora is not None:  #处理启用lora！！！
                     kwargs.update({"enable_lora": self.peft_config.enable_lora})
                     if isinstance(target, Conv1D):
                         in_features, out_features = (
@@ -183,8 +186,9 @@ class LoraModel(torch.nn.Module):
                                 "Setting fan_in_fan_out to False."
                             )
                             kwargs["fan_in_fan_out"] = self.peft_config.fan_in_fan_out = False
-                    new_module = MergedLinear(in_features, out_features, bias=bias, **kwargs)
-                self._replace_module(parent, target_name, new_module, target)
+                    #最终是创建一个 MergedLinear 实例，这个类是带有 LoRA 的线性层实现，会加入低秩矩阵以便进行有效的参数适应。
+                    new_module = MergedLinear(in_features, out_features, bias=bias, **kwargs) 
+                self._replace_module(parent, target_name, new_module, target) #替换掉原始模块
         if not is_target_modules_in_base_model:
             raise ValueError(
                 f"Target modules {self.peft_config.target_modules} not found in the base model. "
@@ -289,7 +293,7 @@ class LoraLayer:
         self.merge_weights = merge_weights
         self.disable_adapters = False
 
-
+#lora主逻辑！
 class Linear(nn.Linear, LoraLayer):
     # Lora implemented in a dense layer
     def __init__(
@@ -304,6 +308,9 @@ class Linear(nn.Linear, LoraLayer):
         # expert_A: int = 1,
         # expert_B: int = 1,
         lora_use_mixer: bool=False,
+        lora_use_scale: bool=False,
+        lora_mask_file: str=None,
+
         **kwargs,
     ):  
         nn.Linear.__init__(self, in_features, out_features, **kwargs)
@@ -311,14 +318,45 @@ class Linear(nn.Linear, LoraLayer):
 
         self.fan_in_fan_out = fan_in_fan_out
         self.lora_use_mixer = lora_use_mixer
+        self.lora_use_scale = lora_use_scale
+        if self.lora_use_scale: #保存mask_file参数
+            self.lora_mask_file = lora_mask_file
+
+        # 读取掩码文件
+        if self.lora_use_scale and self.lora_mask_file is not None:
+            with open(self.lora_mask_file, "r") as f:
+                mask = [list(map(int, line.strip().split())) for line in f]
+            self.mask = torch.tensor(mask, dtype=torch.float32)
+            print
+        
+
+
         # Actual trainable parameters
         if r > 0:
             # self.lora_A = nn.ModuleList([nn.Linear(in_features, r, bias=False) for _ in range(expert_A)])
             # self.lora_B = nn.ModuleList([nn.Linear(r, out_features, bias=False) for _ in range(expert_B)])
             self.lora_A = nn.Linear(in_features, r, bias=False)
+            
             #！！！如果lora_use_mixer是true
             if self.lora_use_mixer:
                 self.lora_AB = nn.Linear(r, r, bias=False)
+
+                print("Before applying mask:")
+                print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
+                print("Mask:\n", self.mask)  # 打印 mask
+
+                if self.lora_use_scale and self.mask is not None:
+                    self.lora_AB.weight.data *= self.mask
+                    
+
+                print("After applying mask:")
+                print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
+
+                self.r_matrix = nn.Parameter(torch.randn(r, r))  #？
+                
+
+                
+
             self.lora_B = nn.Linear(r, out_features, bias=False)
             self.scaling = self.lora_alpha / self.r
             # Freezing the pre-trained weight matrix
@@ -342,7 +380,12 @@ class Linear(nn.Linear, LoraLayer):
                 # nn.init.normal_(self.lora_AB.weight)
                 # nn.init.zeros_(self.lora_AB.weight)
                 # nn.init.eye_(self.lora_AB.weight)
+
                 nn.init.kaiming_uniform_(self.lora_AB.weight, a=math.sqrt(5))
+                if self.lora_use_scale and self.mask is not None:
+                    self.lora_AB.weight.data *= self.mask
+                
+
             # nn.init.kaiming_uniform_(self.lora_B.weight, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B.weight)
     # get average weight
@@ -350,6 +393,17 @@ class Linear(nn.Linear, LoraLayer):
         # res = [l.weight for l in self.lora_A]
         # return self.scale_a*torch.sum(torch.stack(res, dim=-1).to(device=self.lora_A[0].weight.device), dim=-1, keepdim=False)
         if self.lora_use_mixer:
+            
+            print("Before applying mask:")
+            print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
+            print("Mask:\n", self.mask)  # 打印 mask
+            if self.lora_use_scale and self.mask is not None:
+                    self.lora_AB.weight.data *= self.mask
+
+            print("After applying mask:")
+            print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
+
+
             return self.lora_AB.weight @ self.lora_A.weight
         return self.lora_A.weight
     def get_weight_B(self):
@@ -360,6 +414,25 @@ class Linear(nn.Linear, LoraLayer):
         # res = [l(x) for l in self.lora_A]
         # return self.scale_a*torch.sum(torch.stack(res, dim=-1).to(device=x.device), dim=-1, keepdim=False)
         if self.lora_use_mixer:
+            # print("Before applying mask:")
+            # print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
+            # print("Mask:\n", self.mask)  # 打印 mask
+            if self.lora_use_scale and self.mask is not None:
+                # 打印 lora_AB 和 mask 的设备信息
+                if self.lora_use_scale and self.mask is not None:
+                    # 将 mask 移动到与 lora_AB.weight 相同的设备
+                    self.mask = self.mask.to(self.lora_AB.weight.device)
+
+                    # 打印移动后的设备，确认一致性
+                    # print("After moving mask, mask device:", self.mask.device)
+
+                    # 应用 mask
+                    self.lora_AB.weight.data *= self.mask
+                    
+
+            # print("After applying mask:")
+            # print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
+
             return self.lora_AB(self.lora_A(x))
         return self.lora_A(x)
     def forward_B(self, x):
@@ -367,7 +440,7 @@ class Linear(nn.Linear, LoraLayer):
         # return self.scale_b*torch.sum(torch.stack(res, dim=-1).to(device=x.device), dim=-1, keepdim=False)
         return self.lora_B(x)
     
-    def train(self, mode: bool = True):
+    def train(self, mode: bool = True):  #这里循环执行了
         nn.Linear.train(self, mode)
         # for idx in range(len(self.lora_A)):
         self.lora_A.train(mode)
@@ -424,6 +497,7 @@ class Linear(nn.Linear, LoraLayer):
 
         return result
 
+
 class MergedLinear(nn.Linear, LoraLayer):
     # Lora implemented in a dense layer
     def __init__(
@@ -461,7 +535,7 @@ class MergedLinear(nn.Linear, LoraLayer):
             self.lora_ind = self.weight.new_zeros((out_features,), dtype=torch.bool).view(len(enable_lora), -1)
             self.lora_ind[enable_lora, :] = True
             self.lora_ind = self.lora_ind.view(-1)
-        self.reset_parameters()
+        self.reset_parameters()  #初始化所有参数
         if fan_in_fan_out:
             self.weight.data = self.weight.data.T
 
@@ -517,6 +591,10 @@ class MergedLinear(nn.Linear, LoraLayer):
         self.lora_B.eval()
 
     def forward(self, x: torch.Tensor):
+
+
+
+
         previous_dtype = x.dtype
         if self.disable_adapters:
             if self.r > 0 and self.merged and any(self.enable_lora):

@@ -27,7 +27,7 @@ from .utils import PromptLearningConfig
 MODEL_TYPE_TO_PEFT_MODEL_MAPPING = {
     "SEQ_CLS": PeftModelForSequenceClassification,
     "SEQ_2_SEQ_LM": PeftModelForSeq2SeqLM,
-    "CAUSAL_LM": PeftModelForCausalLM,
+    "CAUSAL_LM": PeftModelForCausalLM,   #执行这个函数（peft.model.py）
     "TOKEN_CLS": PeftModelForTokenClassification,
 }
 
@@ -196,8 +196,10 @@ def get_peft_model(model, peft_config):
         if peft_config.peft_type == "BOTTLENECK":
             peft_config = _prepare_bottleneck_config(peft_config, model_config)
         elif peft_config.peft_type == "LORA":
-            peft_config = _prepare_lora_config(peft_config, model_config)
+            peft_config = _prepare_lora_config(peft_config, model_config) #执行了这步
     else:
         peft_config = _prepare_prompt_learning_config(peft_config, model_config)
+    
+    #task.type=CAUSAL_LM则直接执行return部分
     return MODEL_TYPE_TO_PEFT_MODEL_MAPPING[peft_config.task_type](model, peft_config)  #MODEL_TYPE_TO_PEFT_MODEL_MAPPING 是一个字典，映射任务类型到相应的 PEFT 模型类。
 

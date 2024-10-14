@@ -2,22 +2,21 @@
 
 rank=16
 alpha=32
-gpuid=3
-timestamp=$(date +"%m%d%H")
+gpuid=0
 
 model_p_or_n=yahma/llama-7b-hf
-model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
-results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
 
+model_path=trained_models/moslora-r$rank-a$alpha-3e4
+results_path=results/moslora-r$rank-a$alpha-3e4
 
 mkdir -p $model_path
 mkdir -p $results_path
-export CUDA_VISIBLE_DEVICES=$gpuid
+
+# MoSLoRA: --use_moslora
 
 CUDA_VISIBLE_DEVICES=$gpuid python -u finetune.py \
   --base_model $model_p_or_n \
   --data_path 'ft-training_set/commonsense_170k.json' \
-  --mask_file "peft/src/peft/tuners/connectWeight${gpuid}.txt" \
   --output_dir $model_path \
   --batch_size 16 \
   --micro_batch_size 4 \
@@ -29,9 +28,7 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u finetune.py \
   --lora_r $rank \
   --lora_alpha $alpha \
   --use_moslora \
-  --use_scalelora \
-  --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]"   
-  
+  --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]"
 
 
 for ds in ARC-Easy openbookqa social_i_qa ARC-Challenge winogrande piqa boolq hellaswag
