@@ -341,16 +341,16 @@ class Linear(nn.Linear, LoraLayer):
             if self.lora_use_mixer:
                 self.lora_AB = nn.Linear(r, r, bias=False)
 
-                print("Before applying mask:")
-                print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
-                print("Mask:\n", self.mask)  # 打印 mask
+                # print("Before applying mask:")
+                # print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
+                # print("Mask:\n", self.mask)  # 打印 mask
 
                 if self.lora_use_scale and self.mask is not None:
                     self.lora_AB.weight.data *= self.mask
                     
 
-                print("After applying mask:")
-                print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
+                # print("After applying mask:")
+                # print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
 
                 self.r_matrix = nn.Parameter(torch.randn(r, r))  #？
                 

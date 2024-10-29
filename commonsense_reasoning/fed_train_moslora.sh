@@ -14,7 +14,7 @@ mkdir -p $model_path
 mkdir -p $results_path
 export CUDA_VISIBLE_DEVICES=$gpuid
 
-CUDA_VISIBLE_DEVICES=$gpuid python -u finetune.py \
+CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --base_model $model_p_or_n \
   --data_path 'ft-training_set/commonsense_170k.json' \
   --mask_file "peft/src/peft/tuners/connectWeight${gpuid}.txt" \
@@ -30,7 +30,15 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u finetune.py \
   --lora_alpha $alpha \
   --use_moslora \
   --use_scalelora \
-  --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]"   
+  --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
+  --fed_alg "FedAvg" \
+  --num_clients 10 \
+  --train_ratio 0.2\
+  --data_partition_method "iid" \
+  --dirichlet_alpha 0.5 \
+  --num_rounds 10 \
+
+
   
 
 

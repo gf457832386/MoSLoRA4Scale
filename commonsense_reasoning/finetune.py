@@ -23,8 +23,7 @@ from peft import (  # noqa: E402
 )
 from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer, AutoModel  # noqa: F402
 
-print(sys.argv)
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 def train(
         # model/data params
         base_model: str = "",  # the only required argument
@@ -47,8 +46,6 @@ def train(
         lora_dropout: float = 0.05,
         lora_target_modules: List[str] = None,
         use_moslora: bool=False,
-        use_scalelora: bool=False,  #add by phoebe
-        mask_file: str="",          #add by phoebe
         # bottleneck adapter hyperparams
         bottleneck_size: int = 256,
         non_linearity: str = "tanh",
@@ -83,8 +80,6 @@ def train(
         f"val_set_size: {val_set_size}\n"
         f"lora_r: {lora_r}\n"
         f"use_moslora: {use_moslora}\n" #! added
-        f"use_scalelora: {use_scalelora}\n" #! added
-        f"mask_file: {mask_file}\n" #! added
         f"lora_alpha: {lora_alpha}\n"
         f"lora_dropout: {lora_dropout}\n"
         f"lora_target_modules: {lora_target_modules}\n"
@@ -105,20 +100,19 @@ def train(
         f"wandb_log_model: {wandb_log_model}\n"
         f"resume_from_checkpoint: {resume_from_checkpoint}\n"
     )
-    print(f"Received base_model!!!!: '{base_model}'")
     assert (
         base_model
     ), "Please specify a --base_model, e.g. --base_model='decapoda-research/llama-7b-hf'"
-    gradient_accumulation_steps = batch_size // micro_batch_size  #根据批量大小和微批量大小计算累积的梯度步数
+    gradient_accumulation_steps = batch_size // micro_batch_size
 
     device_map = "auto"
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    ddp = world_size != 1  #ddp：判断是否使用分布式训练，ddp 为 True 时表示在多 GPU 环境中使用分布式数据并行
+    ddp = world_size != 1
     if ddp:
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
 
-    # Check if parameter passed or if set within environ 这部分代码决定是否启用 wandb 进行训练监控，优先使用传入的 wandb_project，如果没有则检查环境变量
+    # Check if parameter passed or if set within environ
     use_wandb = len(wandb_project) > 0 or (
             "WANDB_PROJECT" in os.environ and len(os.environ["WANDB_PROJECT"]) > 0
     )
@@ -130,7 +124,6 @@ def train(
     if len(wandb_log_model) > 0:
         os.environ["WANDB_LOG_MODEL"] = wandb_log_model
 
-    #加载基础模型，根据 load_8bit 参数，决定是否以 8 位精度加载模型，8bit 精度有助于减少显存占用。
     if load_8bit:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
@@ -148,7 +141,6 @@ def train(
             trust_remote_code=True,
         )
 
-    #加载分词器
     if "llama2" in base_model:
         tokenizer = LlamaTokenizer.from_pretrained(base_model)
     else:
@@ -159,8 +151,7 @@ def train(
     )
     tokenizer.padding_side = "left"  # Allow batched inference
 
-    def tokenize(prompt, add_eos_token=True):    
-        #将输入文本转换为模型可以理解的 token id，并可选择是否添加 eos_token（结束标记）
+    def tokenize(prompt, add_eos_token=True):
         # there's probably a way to do this with the tokenizer settings
         # but again, gotta move fast
         result = tokenizer(
@@ -186,7 +177,7 @@ def train(
         else:
             return result
 
-    def generate_and_tokenize_prompt(data_point): #生成训练数据时的提示（prompt），然后对提示进行分词
+    def generate_and_tokenize_prompt(data_point):
         full_prompt = generate_prompt(data_point)
         tokenized_full_prompt = tokenize(full_prompt)
         if not train_on_inputs:
@@ -206,20 +197,17 @@ def train(
         config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            lora_use_mixer=use_moslora, #! added  #启用MoSLoRA！！！!!!
-            lora_mask_file=mask_file,  #add by phoebe
-            lora_use_scale=use_scalelora,  #add by phoebe
+            lora_use_mixer=use_moslora, #! added
             target_modules=target_modules,
             lora_dropout=lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
         )
 
-    model = get_peft_model(model, config)  #!!!加载模型和配置
+    model = get_peft_model(model, config)
     if adapter_name == "prefix-tuning":
         model.to('cuda')
 
-    #数据加载
     if data_path.endswith(".json"):  # todo: support jsonl
         data = load_dataset("json", data_files=data_path)
     else:
@@ -246,7 +234,7 @@ def train(
             print(f"Checkpoint {checkpoint_name} not found")
 
     model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
-    #这一部分在mapping
+
     if val_set_size > 0:
         train_val = data["train"].train_test_split(
             test_size=val_set_size, shuffle=True, seed=42
@@ -261,15 +249,12 @@ def train(
         train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
         val_data = None
 
-    #如果不是使用 DDP 且有多个 GPU，则启用模型并行化
     if not ddp and torch.cuda.device_count() > 1:
         # keeps Trainer from trying its own DataParallelism when more than 1 gpu is available
-        # model.is_parallelizable = True
-        # model.model_parallel = True
-        model.is_parallelizable = False
-        model.model_parallel = False
+        model.is_parallelizable = True
+        model.model_parallel = True
 
-    trainer = transformers.Trainer(  #训练器配置
+    trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
         eval_dataset=val_data,
@@ -310,7 +295,7 @@ def train(
     if torch.__version__ >= "2" and sys.platform != "win32":
         model = torch.compile(model)
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)   #执行训练
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
 
