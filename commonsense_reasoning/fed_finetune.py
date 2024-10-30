@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument("--data_partition_method", type=str, default="iid", help="Data partition method (e.g., iid, dirichlet)")
     parser.add_argument("--dirichlet_alpha", type=float, default=0.5, help="Dirichlet alpha for non-iid partitioning")
     parser.add_argument("--num_rounds", type=int, default=10, help="Dirichlet alpha for non-iid partitioning")
+    parser.add_argument("--save_model_freq", type=int, default=1, help="save the checkpoint freq")
     # Parse arguments and return
     return parser.parse_args()
 
@@ -129,6 +130,7 @@ def train(
         data_partition_method: str = "iid",  # data partitioning method
         dirichlet_alpha: float = 0.5,  # Dirichlet distribution alpha for non-iid data
         num_rounds: int=10,
+        save_model_freq: int =1
         
 ):
     print(
@@ -171,8 +173,9 @@ def train(
         f"data_partition_method: {data_partition_method}\n"  # added
         f"dirichlet_alpha: {dirichlet_alpha}\n"  # added
         f"num_rounds: {num_rounds}\n"  # added
+        f"save_model_freq: {save_model_freq}\n"  # added
     )
-    # print(f"Received base_model!!!!: '{base_model}'")
+  
     assert (
         base_model
     ), "Please specify a --base_model, e.g. --base_model='decapoda-research/llama-7b-hf'"
@@ -242,6 +245,7 @@ def train(
             truncation=True,
             max_length=cutoff_len,
             padding=False,  # 填充至最大长度
+            #padding = 'max_length',
             return_tensors=None  # 返回 PyTorch 张量
         )
         if (
@@ -431,8 +435,8 @@ def train(
         )
     ).__get__(model, type(model))
 
-    if torch.__version__ >= "2" and sys.platform != "win32":
-        model = torch.compile(model)
+    # if torch.__version__ >= "2" and sys.platform != "win32":
+    #     model = torch.compile(model)
 
     #========定义全局模型与局部模型==========
     global_dict = copy.deepcopy(get_peft_model_state_dict(model))
@@ -441,11 +445,11 @@ def train(
     #========开始联邦学习============
     training_loss = [[] for i in range(fed_args.num_clients)]  #创建一个空列表，来记录该客户端在每一轮的训练损失
 
-    sample_input = "This is a test sentence"
-    encoded_input = tokenizer(sample_input, return_tensors="pt")
+    # sample_input = "This is a test sentence"
+    # encoded_input = tokenizer(sample_input, return_tensors="pt")
 
-    if "input_ids" not in encoded_input or len(encoded_input["input_ids"]) == 0:
-        print("Error: Tokenizer did not generate input_ids correctly.")
+    # if "input_ids" not in encoded_input or len(encoded_input["input_ids"]) == 0:
+    #     print("Error: Tokenizer did not generate input_ids correctly.")
     # else:
     #     print(f"Encoded input: {encoded_input}")
 

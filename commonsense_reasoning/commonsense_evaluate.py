@@ -193,24 +193,31 @@ def load_model(args) -> tuple:
     Returns:
         tuple(tokenizer, model)
     """
+    #获取基础模型与LoRA权重的路径
     base_model = args.base_model
     if not base_model:
         raise ValueError(f'can not find base model name by the value: {args.model}')
+    
     lora_weights = args.lora_weights
     if not lora_weights:
         raise ValueError(f'can not find lora weight, the value is: {lora_weights}')
-    if lora_weights == "None":
+    if lora_weights == "None": #检查是否加载 LoRA 微调权重
         print("do not use lora, evaluate the vanilla weight")
 
-    load_8bit = args.load_8bit
+    load_8bit = args.load_8bit  # 判断是否加载 8-bit 模型（节省显存）
+
+    # 加载 Tokenizer，根据模型名称选择适当的加载方法
     if "llama2" in base_model:
         tokenizer = LlamaTokenizer.from_pretrained(base_model)
     else:
         tokenizer = AutoTokenizer.from_pretrained(base_model)
     tokenizer.padding_side = "left"
     tokenizer.pad_token_id = (
-        0  # unk. we want this to be different from the eos token
-    )
+        0  
+    )# unk. we want this to be different from the eos token  配置 tokenizer 的填充方向为左对齐（padding_side = "left"），并将 pad_token_id 设置为 0，代表 <unk> token，用于批量处理中对齐输入长度。
+
+
+
     if device == "cuda":
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
@@ -219,7 +226,7 @@ def load_model(args) -> tuple:
             device_map="auto",
             trust_remote_code=True,
         ) # fix zwq
-        if lora_weights != "None":
+        if lora_weights != "None":  # 如果存在 LoRA 权重，则加载微调后的 LoRA 模型
             model = PeftModel.from_pretrained(
                 model,
                 lora_weights,

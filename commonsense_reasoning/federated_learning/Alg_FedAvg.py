@@ -14,8 +14,11 @@ from peft import get_peft_model_state_dict, set_peft_model_state_dict
 from tqdm import tqdm
 import os
 import numpy as np
-
 import math
+
+
+# 禁用 Hugging Face Hub 上传和下载
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 def get_random_clients(fed_args, clientnum_perround):
     # 随机从0到fed_args.num_clients-1之间抽取clientnum_perround个不同的数字
@@ -90,43 +93,9 @@ def FedAvg(fed_args,model,global_dict,local_dict_list,training_loss,tokenizer,tr
             new_lr = cosine_learning_rate(round, fed_args.num_rounds, fed_args.learning_rate, 1e-6)      # manually schedule the learning rate
             # training_args = get_training_args(args, new_lr)
 
-            # ===== Train local model on the client side =====
-            # trainer = get_fed_local_trainer(
-            #     model=model,
-            #     tokenizer=tokenizer,
-            #     training_args=training_args,
-            #     local_dataset=train_dataloader_list[client],
-            #     formatting_prompts_func=formatting_prompts_func,
-            #     data_collator=data_collator,
-            #     global_dict=global_dict,
-            #     args=args,
-            #     script_args=script_args,
-            #     local_auxiliary=auxiliary_model_list[client],
-            #     global_auxiliary=global_auxiliary,
-            # )
-
-            for client_id, dataloader in enumerate(train_dataloader_list):
-                if len(dataloader.dataset) == 0:
-                    print(f"Warning: Client {client_id}'s dataset is empty!")
-            
-            # sample_input = "This is a test sentence"
-            # encoded_input = tokenizer(sample_input, return_tensors="pt")
-
-            # # 检查是否生成了 input_ids
-            # if "input_ids" not in encoded_input or len(encoded_input["input_ids"]) == 0:
-            #     print("Error: Tokenizer did not generate input_ids correctly.")
-            # else:
-            #     print(f"Encoded input: {encoded_input['input_ids']}")    
-
-            # for i, batch in enumerate(train_dataloader_list[0]):
-            #     if "input_ids" not in batch:
-            #         print(f"Error: input_ids missing in batch {i}")
-            #     else:
-            #         print(f"Batch {i} input_ids: {batch['input_ids']}")    
-            
-               
-            
-
+            # for client_id, dataloader in enumerate(train_dataloader_list):
+            #     if len(dataloader.dataset) == 0:
+            #         print(f"Warning: Client {client_id}'s dataset is empty!")
 
 
             # ===== Train local model on the client side =====
@@ -153,7 +122,10 @@ def FedAvg(fed_args,model,global_dict,local_dict_list,training_loss,tokenizer,tr
                     ddp_find_unused_parameters=False,
                     group_by_length=False,
                     report_to="wandb" if use_wandb else None,
+                    # debug="underflow_overflow",
+                    # report_to=None,
                     run_name=wandb_run_name if use_wandb else None,
+                    #remove_unused_columns=False  # 移除未使用的列
                 ),
                 data_collator=transformers.DataCollatorForSeq2Seq(
                     tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
@@ -162,34 +134,6 @@ def FedAvg(fed_args,model,global_dict,local_dict_list,training_loss,tokenizer,tr
 
             print(f"Number of samples in train_dataset for client {client}: {len(train_dataloader_list[client].dataset)}")
             print(f"Number of samples in eval_dataset for client {client}: {len(eval_dataloader_list[client].dataset)}")
-
-            # 检查数据加载器中的示例批次
-            sample_batch = next(iter(train_dataloader_list[client]))
-            sample_collated = transformers.DataCollatorForSeq2Seq(
-                tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
-            )(sample_batch)
-            print(sample_collated)  # 检查结构，确认 input_ids 存在
-
-
-
-            for client in range(len(train_dataloader_list)):
-                for batch in train_dataloader_list[client]:
-                    if len(batch["input_ids"]) == 0:
-                        print(f"Client {client}: input_ids is empty!")
-                    else:
-                        print(f"Client {client}: input_ids sample:", batch["input_ids"][:5])  # 打印前五个
-                    break  # 仅检查第一个批次
-            
-
-
-
-            print("Before training, checking train_dataset and eval_dataset content...")
-            for client in range(len(train_dataloader_list)):
-                train_dataset = train_dataloader_list[client].dataset
-                print(f"Client {client} - Train Dataset Sample:", train_dataset[0])  # 检查第一个样本
-                if "input_ids" not in train_dataset[0]:
-                    print(f"Error: No input_ids found in client {client}'s train_dataset")
-
 
 
 
@@ -207,15 +151,23 @@ def FedAvg(fed_args,model,global_dict,local_dict_list,training_loss,tokenizer,tr
         global_dict= global_aggregate(global_dict, local_dict_list, n_sample_list,clients_this_round)
         set_peft_model_state_dict(model, global_dict)   # Update global model更新全局模型参数
 
-        # ===== Save the model =====
+        # ===== Save the model（中间检查点） =====
         if (round+1) % fed_args.save_model_freq == 0:
-            trainer.save_model(os.path.join(fed_args.output_dir, f"checkpoint-{round+1}"))
+            model_save_path = os.path.join(fed_args.output_dir, f"checkpoint-{round+1}")
+            os.makedirs(model_save_path, exist_ok=True)
+            trainer.save_model(model_save_path)            
+            # trainer.save_model(os.path.join(fed_args.output_dir, f"checkpoint-{round+1}"))
         
         np.save(os.path.join(fed_args.output_dir, "training_loss.npy"), np.array(training_loss))
 
+    #保存最终的模型
+    print("==save the final model==")
+    model.save_pretrained(fed_args.output_dir)  #保存微调模型
+        
+
 
    
    
 
     
-    
+     

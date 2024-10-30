@@ -1,8 +1,8 @@
 #!/bin/sh
 
-rank=16
+rank=4
 alpha=32
-gpuid=3
+gpuid=0
 timestamp=$(date +"%m%d%H")
 
 model_p_or_n=yahma/llama-7b-hf
@@ -32,11 +32,12 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --use_scalelora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
-  --num_clients 10 \
-  --train_ratio 0.2\
+  --num_clients 100 \
+  --train_ratio 0.02\
   --data_partition_method "iid" \
   --dirichlet_alpha 0.5 \
-  --num_rounds 10 \
+  --num_rounds 2 \
+  --save_model_freq 1\
 
 
   
