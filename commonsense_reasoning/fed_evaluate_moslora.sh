@@ -6,8 +6,8 @@ gpuid=0
 timestamp=$(date +"%m%d%H")
 
 model_p_or_n=yahma/llama-7b-hf
-model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
-results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
+model_path=/root/autodl-tmp/MoSLoRA4Scale/commonsense_reasoning/trained_models/debug
+results_path=results/debug
 
 
 mkdir -p $model_path
@@ -24,5 +24,6 @@ do
     --batch_size 1 \
     --base_model $model_p_or_n \
     --lora_weights $model_path \
-    --save_dir $results_path
+    --save_dir $results_path\
+    --round_num 10
 done

@@ -32,6 +32,7 @@ def main(
         lora_weights: str = "tloen/alpaca-lora-7b",
         share_gradio: bool = False,
         save_dir: str = "",
+        
 ):
     args = parse_args()
     print(args)
@@ -49,6 +50,8 @@ def main(
         prompts = [generate_prompt(instruction, input) for instruction in instructions]
         inputs = tokenizer(prompts, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(device)
+        # print(f"Input IDs: {inputs['input_ids']}")
+        # print(f"Attention Mask: {inputs['attention_mask']}")
         generation_config = GenerationConfig(
             temperature=temperature,
             top_p=top_p,
@@ -67,11 +70,29 @@ def main(
         s = generation_output.sequences
         outputs = tokenizer.batch_decode(s, skip_special_tokens=True)
         outputs = [o.split("### Response:")[1].strip() for o in outputs]
+        # #检查中间结果是否为空
+        # print(f"Generated sequences: {outputs}")
+        # generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # print(f"Generated text: {generated_text}")
+
+        #     # 输出生成结果进行调试
+        # print("Generated outputs:")
+        # for i, output in enumerate(outputs):
+        #     print(f"Output {i}: {output}")
+
+        # try:
+        #     outputs = [o.split("### Response:")[1].strip() if "### Response:" in o else o for o in outputs]
+        # except IndexError:
+        #     print("Warning: Unable to split response. Generated output might be malformed.")
+        #     outputs = [""] * len(s)
         # print(outputs)
         return outputs
     #! save file
-    save_file = f'{args.save_dir}/{args.model}-{args.adapter}-{args.dataset}.json'
-    create_dir(f'{args.save_dir}/')
+     # 创建存储路径，根据轮次创建文件夹
+    round_dir = os.path.join(args.save_dir, f"round_{args.round_num}")
+    create_dir(round_dir)  # 确保轮次文件夹被创建
+    save_file = os.path.join(round_dir, f'{args.model}-{args.adapter}-{args.dataset}.json')
+    # create_dir(f'{args.save_dir}/')
 
     dataset = load_data(args)
     batches = create_batch(dataset, args.batch_size)
@@ -82,6 +103,10 @@ def main(
     current = 0
     output_data = []
     pbar = tqdm(total=total)
+
+     # 存储路径包含轮次文件夹和数据集名称
+    save_file = os.path.join(round_dir, f'{args.model}-{args.adapter}-{args.dataset}.json')
+
     for idx, batch in enumerate(batches):
         current += len(batch)
         instructions = [data.get('instruction') for data in batch]
@@ -100,10 +125,11 @@ def main(
             new_data['pred'] = predict
             new_data['flag'] = flag
             output_data.append(new_data)
-            # print(data["instruction"])
-            # print(output)
-            # print('prediction:', predict)
-            # print('label:', label)
+            # 调试输出生成结果
+            # print(f"Instruction: {data['instruction']}")
+            # print(f"Generated Output: {output}")
+            # print(f"Extracted Prediction: {predict}")
+            # print(f"Label: {label}")
         # print('---------------')
         print(f'\rtest:{idx + 1}/{total} | accuracy {correct}  {correct / current}')
         # print('---------------')
@@ -180,6 +206,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, required=True)
     parser.add_argument('--load_8bit', action='store_true', default=False)
     parser.add_argument('--save_dir', type=str, default="Experiment" )
+    parser.add_argument('--round_num', type=str, default="Experiment" )
 
     return parser.parse_args()
 
@@ -225,7 +252,9 @@ def load_model(args) -> tuple:
             torch_dtype=torch.float16,
             device_map="auto",
             trust_remote_code=True,
+            
         ) # fix zwq
+        print("Model loaded successfully")
         if lora_weights != "None":  # 如果存在 LoRA 权重，则加载微调后的 LoRA 模型
             model = PeftModel.from_pretrained(
                 model,

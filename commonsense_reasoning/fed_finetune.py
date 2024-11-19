@@ -16,6 +16,7 @@ import numpy as np
 from federated_learning import *
 import math
 from federated_learning.Alg_FedAvg import FedAvg
+from federated_learning.Alg_FLoRA import FLoRA
 
 
 
@@ -72,6 +73,8 @@ def parse_args():
     parser.add_argument("--dirichlet_alpha", type=float, default=0.5, help="Dirichlet alpha for non-iid partitioning")
     parser.add_argument("--num_rounds", type=int, default=10, help="Dirichlet alpha for non-iid partitioning")
     parser.add_argument("--save_model_freq", type=int, default=1, help="save the checkpoint freq")
+    parser.add_argument("--results_path", type=str, default="", help="save the checkpoint freq")
+    parser.add_argument("--gpuid", type=int, default=0, help="gpuid")
     # Parse arguments and return
     return parser.parse_args()
 
@@ -130,7 +133,9 @@ def train(
         data_partition_method: str = "iid",  # data partitioning method
         dirichlet_alpha: float = 0.5,  # Dirichlet distribution alpha for non-iid data
         num_rounds: int=10,
-        save_model_freq: int =1
+        save_model_freq: int =1,
+        results_path:str = "",
+        gpuid: int =0
         
 ):
     print(
@@ -174,6 +179,8 @@ def train(
         f"dirichlet_alpha: {dirichlet_alpha}\n"  # added
         f"num_rounds: {num_rounds}\n"  # added
         f"save_model_freq: {save_model_freq}\n"  # added
+        f"result_path: {results_path}\n"  # added
+        f"gpuid: {gpuid}\n"  # added
     )
   
     assert (
@@ -395,36 +402,7 @@ def train(
         # model.model_parallel = True
         model.is_parallelizable = False
         model.model_parallel = False
-
-    # trainer = transformers.Trainer(  #训练器配置
-    #     model=model,
-    #     train_dataset=train_data,
-    #     eval_dataset=val_data,
-    #     args=transformers.TrainingArguments(
-    #         per_device_train_batch_size=micro_batch_size,
-    #         gradient_accumulation_steps=gradient_accumulation_steps,
-    #         warmup_steps=100,
-    #         num_train_epochs=num_epochs,
-    #         learning_rate=learning_rate,
-    #         fp16=True,
-    #         logging_steps=10,
-    #         optim="adamw_torch",
-    #         evaluation_strategy="steps" if val_set_size > 0 else "no",
-    #         save_strategy="steps",
-    #         eval_steps=eval_step if val_set_size > 0 else None,
-    #         save_steps=save_step,
-    #         output_dir=output_dir,
-    #         save_total_limit=3,
-    #         load_best_model_at_end=True if val_set_size > 0 else False,
-    #         ddp_find_unused_parameters=False if ddp else None,
-    #         group_by_length=group_by_length,
-    #         report_to="wandb" if use_wandb else None,
-    #         run_name=wandb_run_name if use_wandb else None,
-    #     ),
-    #     data_collator=transformers.DataCollatorForSeq2Seq(
-    #         tokenizer, pad_to_multiple_of=8, return_tensors="pt", padding=True
-    #     ),
-    # )
+        
     model.config.use_cache = False
 
 
@@ -439,8 +417,10 @@ def train(
     #     model = torch.compile(model)
 
     #========定义全局模型与局部模型==========
+    print(f"准备copyglobal_dict")
     global_dict = copy.deepcopy(get_peft_model_state_dict(model))
-    local_dict_list = [copy.deepcopy(global_dict) for i in range(fed_args.num_clients)]
+    # print(f"准备local_dict_list")
+    # local_dict_list = [copy.deepcopy(global_dict) for i in range(fed_args.num_clients)]
 
     #========开始联邦学习============
     training_loss = [[] for i in range(fed_args.num_clients)]  #创建一个空列表，来记录该客户端在每一轮的训练损失
@@ -453,9 +433,19 @@ def train(
     # else:
     #     print(f"Encoded input: {encoded_input}")
 
+    device = torch.device("cuda")
+    set_peft_model_state_dict(model, global_dict)
+    test_prompt = "Please choose the correct answer: Which color is the sky? answer1: blue, answer2: red"
+    inputs = tokenizer(test_prompt, return_tensors="pt").to(device)
+    outputs = model.generate(input_ids=inputs["input_ids"], max_new_tokens=32)
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print(f"Post-training output: {generated_text}")
+
     #联邦算法选择
     if fed_args.fed_alg == "FedAvg": 
-        FedAvg(fed_args,model,global_dict,local_dict_list,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+        FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+    elif fed_args.fed_alg == "FLoRA":
+        FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
 
     #elif补充其他联邦学习算法
 

@@ -33,11 +33,13 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
   --num_clients 100 \
-  --train_ratio 0.02\
+  --train_ratio 0.2 \
   --data_partition_method "iid" \
   --dirichlet_alpha 0.5 \
-  --num_rounds 2 \
-  --save_model_freq 1\
+  --num_rounds 10 \
+  --save_model_freq 3\
+  --results_path $results_path \
+  --gpuid $gpuid\
 
 
   
@@ -52,5 +54,6 @@ do
     --batch_size 1 \
     --base_model $model_p_or_n \
     --lora_weights $model_path \
-    --save_dir $results_path
+    --save_dir $results_path \
+    --round_num 10
 done
