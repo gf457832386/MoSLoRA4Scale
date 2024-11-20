@@ -45,7 +45,7 @@ def FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_li
             continue  #继续下一个client
             
         print(f">> =====Client {client}:")
-        #如果该客户端需要训练，则进行以下步骤,将全局模型参数同步到局部模型里
+        #如果该客户端需要训练，则进行以下步骤,将全局模型参数同步到局部模型里123
 
 
         
