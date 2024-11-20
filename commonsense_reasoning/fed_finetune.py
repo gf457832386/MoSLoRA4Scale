@@ -66,9 +66,8 @@ def parse_args():
     parser.add_argument("--mask_file", type=str, default="", help="Path to mask file for LoRA")
 
     # New parameters to add  FL
-    parser.add_argument("--fed_alg", type=str, default="FedAvg", help="federated learning method")
-    parser.add_argument("--num_clients", type=int, default=10, help="Number of clients for federated learning")
-    parser.add_argument("--train_ratio", type=float, default=0.2, help="Ratio of clients for federated learning Per round")
+    parser.add_argument("--fed_alg", type=str, default="FedAvg", help="federated learning method")Qwqq
+    
     parser.add_argument("--data_partition_method", type=str, default="iid", help="Data partition method (e.g., iid, dirichlet)")
     parser.add_argument("--dirichlet_alpha", type=float, default=0.5, help="Dirichlet alpha for non-iid partitioning")
     parser.add_argument("--num_rounds", type=int, default=10, help="Dirichlet alpha for non-iid partitioning")
