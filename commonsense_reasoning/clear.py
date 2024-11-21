@@ -1,7 +1,7 @@
 import torch
 
 # 假设只使用第一个 GPU（ID 为 0）
-gpu_id = 4
+gpu_id = 0
 
 # 获取系统中可用的 GPU 数量
 available_gpus = torch.cuda.device_count()

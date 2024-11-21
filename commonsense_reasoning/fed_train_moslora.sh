@@ -31,7 +31,7 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --use_moslora \
   --use_scalelora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
-  --fed_alg "FedAvg" \
+  --fed_alg "FLoRA" \
   --num_clients 100 \
   --train_ratio 0.2 \
   --data_partition_method "iid" \

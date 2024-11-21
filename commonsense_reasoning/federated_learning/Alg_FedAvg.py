@@ -153,15 +153,15 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
             set_peft_model_state_dict(model, global_dict)   # sync the global model to the local model
             # 检查提取的参数是否为空
             peft_state_dict = get_peft_model_state_dict(model)
-            print("peft_state_dict.keys():")
-            print(peft_state_dict.keys())
+            # print("peft_state_dict.keys():")
+            # print(peft_state_dict.keys())
             if not peft_state_dict:
                 print(f"Error: Failed to extract PEFT model state dictionary for client {client}")
 
-            # 打印部分参数的信息
-            for k, v in peft_state_dict.items():
-                print(f"Extracted parameter {k}: Mean={v.mean().item()}, Std={v.std().item()}")
-                break  # 仅打印第一个参数，避免输出过多信息
+            # # 打印部分参数的信息
+            # for k, v in peft_state_dict.items():
+            #     print(f"Extracted parameter {k}: Mean={v.mean().item()}, Std={v.std().item()}")
+            #     break  # 仅打印第一个参数，避免输出过多信息
 
 
             # sub_dataset = get_dataset_this_round(train_dataloader_list[client], round, args, script_args)      # get the required sub-dataset for this round
