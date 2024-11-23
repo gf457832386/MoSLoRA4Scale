@@ -2,7 +2,7 @@
 
 rank=4
 alpha=32
-gpuid=3
+gpuid=2
 timestamp=$(date +"%m%d%H")
 
 model_p_or_n=yahma/llama-7b-hf
