@@ -42,10 +42,14 @@ def run_evaluation(gpuid, model_p_or_n, model_path, results_path,round_num):
 os.environ["HF_HUB_OFFLINE"] = "1"
 
 
+# 设置随机种子
+seed = 42  # 任意固定值
+random.seed(seed)
+
 
 def get_random_clients(fed_args, clientnum_perround,current_round):
     # 随机从0到fed_args.num_clients-1之间抽取clientnum_perround个不同的数字
-    random.seed()
+    random.seed(seed + current_round)
     clients_this_round = random.sample(range(fed_args.num_clients), clientnum_perround)
 
 
@@ -239,14 +243,14 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
         
      
 
-        print("Running post-training validation...")
-        device = torch.device("cuda")
-        set_peft_model_state_dict(model, global_dict)
-        test_prompt = "Please choose the correct answer: Which color is the sky? answer1: blue, answer2: red"
-        inputs = tokenizer(test_prompt, return_tensors="pt").to(device)
-        outputs = model.generate(input_ids=inputs["input_ids"], max_new_tokens=32)
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print(f"Post-training output: {generated_text}")
+        # print("Running post-training validation...")
+        # device = torch.device("cuda")
+        # set_peft_model_state_dict(model, global_dict)
+        # test_prompt = "Please choose the correct answer: Which color is the sky? answer1: blue, answer2: red"
+        # inputs = tokenizer(test_prompt, return_tensors="pt").to(device)
+        # outputs = model.generate(input_ids=inputs["input_ids"], max_new_tokens=32)
+        # generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # print(f"Post-training output: {generated_text}")
 
 
 
