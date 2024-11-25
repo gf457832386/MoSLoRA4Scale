@@ -17,6 +17,8 @@ from federated_learning import *
 import math
 from federated_learning.Alg_FedAvg import FedAvg
 from federated_learning.Alg_FLoRA import FLoRA
+from federated_learning.Alg_FedAvg_NoNoise import FedAvg_NoNoise
+
 
 
 
@@ -419,7 +421,8 @@ def train(
     #========定义全局模型与局部模型==========
     print(f"准备copyglobal_dict")
     global_dict = copy.deepcopy(get_peft_model_state_dict(model))
-    # print(f"准备local_dict_list")
+    print(f"global_dict")
+    print(global_dict)
     # local_dict_list = [copy.deepcopy(global_dict) for i in range(fed_args.num_clients)]
 
     #========开始联邦学习============
@@ -446,6 +449,8 @@ def train(
         FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
     elif fed_args.fed_alg == "FLoRA":
         FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+    elif fed_args.fed_alg == "FedAvg_NoNoise":
+        FedAvg_NoNoise(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
 
     #elif补充其他联邦学习算法
 

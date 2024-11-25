@@ -52,8 +52,6 @@ def get_random_clients(fed_args, clientnum_perround,current_round):
     random.seed(seed + current_round)
     clients_this_round = random.sample(range(fed_args.num_clients), clientnum_perround)
 
-
-    
     log_file_path = os.path.join(fed_args.output_dir, "client_selection_log.txt")
     # 将抽取的客户端 ID 写入日志文件
     with open(log_file_path, 'a') as f:
