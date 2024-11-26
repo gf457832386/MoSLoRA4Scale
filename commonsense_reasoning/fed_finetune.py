@@ -17,6 +17,8 @@ from federated_learning import *
 import math
 from federated_learning.Alg_FedAvg import FedAvg
 from federated_learning.Alg_FLoRA import FLoRA
+from federated_learning.Alg_FedAvg_NoNoise import FedAvg_NoNoise
+
 
 
 
@@ -63,6 +65,7 @@ def parse_args():
     parser.add_argument("--target_modules", type=str, nargs="*", help="Target modules for LoRA")
     parser.add_argument("--use_moslora", action="store_true", help="Use MoS LoRA")
     parser.add_argument("--use_scalelora", action="store_true", help="Use ScaleLoRA")
+    parser.add_argument("--use_masklora", action="store_true", help="Use MaskLoRA")
     parser.add_argument("--mask_file", type=str, default="", help="Path to mask file for LoRA")
 
     # New parameters to add  FL
@@ -105,6 +108,7 @@ def train(
         lora_target_modules: List[str] = None,
         use_moslora: bool=False,
         use_scalelora: bool=False,  #add by phoebe
+        use_masklora: bool=False,  #add by phoebe
         mask_file: str="",          #add by phoebe
         # bottleneck adapter hyperparams
         bottleneck_size: int = 256,
@@ -152,6 +156,7 @@ def train(
         f"lora_r: {lora_r}\n"
         f"use_moslora: {use_moslora}\n" #! added
         f"use_scalelora: {use_scalelora}\n" #! added
+        f"use_masklora: {use_masklora}\n" #! added
         f"mask_file: {mask_file}\n" #! added
         f"lora_alpha: {lora_alpha}\n"
         f"lora_dropout: {lora_dropout}\n"
@@ -308,6 +313,7 @@ def train(
             lora_use_mixer=use_moslora, #! added  #启用MoSLoRA！！！!!!
             lora_mask_file=mask_file,  #add by phoebe
             lora_use_scale=use_scalelora,  #add by phoebe
+            lora_use_mask=use_masklora,   #add by phoebe
             target_modules=target_modules,
             lora_dropout=lora_dropout,
             bias="none",
@@ -419,7 +425,8 @@ def train(
     #========定义全局模型与局部模型==========
     print(f"准备copyglobal_dict")
     global_dict = copy.deepcopy(get_peft_model_state_dict(model))
-    # print(f"准备local_dict_list")
+    print(f"global_dict")
+    print(global_dict)
     # local_dict_list = [copy.deepcopy(global_dict) for i in range(fed_args.num_clients)]
 
     #========开始联邦学习============
@@ -446,6 +453,8 @@ def train(
         FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
     elif fed_args.fed_alg == "FLoRA":
         FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+    elif fed_args.fed_alg == "FedAvg_NoNoise":
+        FedAvg_NoNoise(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
 
     #elif补充其他联邦学习算法
 

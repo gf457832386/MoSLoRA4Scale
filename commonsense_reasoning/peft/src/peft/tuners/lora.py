@@ -86,6 +86,7 @@ class LoraConfig(PeftConfig):
     # expert_B: int = field(default=1, metadata={"help": "expert for lora B"})
     lora_use_mixer: bool=field(default=False, metadata={"help": "whether to use mixer"})
     lora_use_scale: bool=field(default=False, metadata={"help": "whether to use scale"})
+    lora_use_mask: bool=field(default=False, metadata={"help": "whether to use mask"})
     lora_mask_file: str = field(default='', metadata={"help": "Path to the mask file for LoRA layers"}) # add by phoebe
     def __post_init__(self):
         self.peft_type = PeftType.LORA
@@ -143,6 +144,7 @@ class LoraModel(torch.nn.Module):
             # "expert_B": self.peft_config.expert_B,
             "lora_use_mixer": self.peft_config.lora_use_mixer,
             "lora_use_scale": self.peft_config.lora_use_scale,  #是否自适应
+            "lora_use_mask": self.peft_config.lora_use_mask,  #是否自适应
             "lora_mask_file":self.peft_config.lora_mask_file, #自适应掩码矩阵路径
         }
         key_list = [key for key, _ in self.model.named_modules()]
@@ -309,6 +311,7 @@ class Linear(nn.Linear, LoraLayer):
         # expert_B: int = 1,
         lora_use_mixer: bool=False,
         lora_use_scale: bool=False,
+        lora_use_mask:bool=False,
         lora_mask_file: str=None,
 
         **kwargs,
@@ -319,15 +322,26 @@ class Linear(nn.Linear, LoraLayer):
         self.fan_in_fan_out = fan_in_fan_out
         self.lora_use_mixer = lora_use_mixer
         self.lora_use_scale = lora_use_scale
+        self.lora_use_mask = lora_use_mask
+        
         if self.lora_use_scale: #保存mask_file参数
             self.lora_mask_file = lora_mask_file
+
+        if self.lora_use_mask: #保存mask_file参数
+            self.lora_mask_file = lora_mask_file
+        
 
         # 读取掩码文件
         if self.lora_use_scale and self.lora_mask_file is not None:
             with open(self.lora_mask_file, "r") as f:
                 mask = [list(map(int, line.strip().split())) for line in f]
             self.mask = torch.tensor(mask, dtype=torch.float32)
-            print
+
+        # 读取掩码文件
+        if self.lora_use_mask and self.lora_mask_file is not None:
+            with open(self.lora_mask_file, "r") as f:
+                mask = [list(map(int, line.strip().split())) for line in f]
+            self.mask = torch.tensor(mask, dtype=torch.float32)
         
 
 
@@ -347,6 +361,11 @@ class Linear(nn.Linear, LoraLayer):
 
                 if self.lora_use_scale and self.mask is not None:
                     self.lora_AB.weight.data *= self.mask
+
+
+                if self.lora_use_mask and self.mask is not None:
+                    self.lora_AB.weight.data = self.mask
+              
                     
 
                 # print("After applying mask:")
@@ -381,9 +400,14 @@ class Linear(nn.Linear, LoraLayer):
                 # nn.init.zeros_(self.lora_AB.weight)
                 # nn.init.eye_(self.lora_AB.weight)
 
-                nn.init.kaiming_uniform_(self.lora_AB.weight, a=math.sqrt(5))
-                if self.lora_use_scale and self.mask is not None:
-                    self.lora_AB.weight.data *= self.mask
+                
+                if self.lora_use_mask and self.mask is not None:
+                    self.lora_AB.weight.data = self.mask
+                else:
+                    nn.init.kaiming_uniform_(self.lora_AB.weight, a=math.sqrt(5))
+                    if self.lora_use_scale and self.mask is not None:
+                        self.lora_AB.weight.data *= self.mask
+
                 
 
             # nn.init.kaiming_uniform_(self.lora_B.weight, a=math.sqrt(5))
@@ -399,6 +423,8 @@ class Linear(nn.Linear, LoraLayer):
             print("Mask:\n", self.mask)  # 打印 mask
             if self.lora_use_scale and self.mask is not None:
                     self.lora_AB.weight.data *= self.mask
+            if self.lora_use_mask and self.mask is not None:
+                    self.lora_AB.weight.data = self.mask
 
             print("After applying mask:")
             print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印应用 mask 后的权重矩阵
@@ -418,16 +444,25 @@ class Linear(nn.Linear, LoraLayer):
             # print("lora_AB weight data:\n", self.lora_AB.weight.data)  # 打印 lora_AB 的权重矩阵
             # print("Mask:\n", self.mask)  # 打印 mask
             if self.lora_use_scale and self.mask is not None:
-                # 打印 lora_AB 和 mask 的设备信息
-                if self.lora_use_scale and self.mask is not None:
-                    # 将 mask 移动到与 lora_AB.weight 相同的设备
-                    self.mask = self.mask.to(self.lora_AB.weight.device)
+                # 将 mask 移动到与 lora_AB.weight 相同的设备
+                self.mask = self.mask.to(self.lora_AB.weight.device)
 
-                    # 打印移动后的设备，确认一致性
-                    # print("After moving mask, mask device:", self.mask.device)
+                # 打印移动后的设备，确认一致性
+                # print("After moving mask, mask device:", self.mask.device)
 
-                    # 应用 mask
-                    self.lora_AB.weight.data *= self.mask
+                # 应用 mask
+                self.lora_AB.weight.data *= self.mask
+            
+            if self.lora_use_mask and self.mask is not None:
+                # 将 mask 移动到与 lora_AB.weight 相同的设备
+                self.mask = self.mask.to(self.lora_AB.weight.device)
+
+                # 打印移动后的设备，确认一致性
+                # print("After moving mask, mask device:", self.mask.device)
+
+                # 应用 mask
+                self.lora_AB.weight.data = self.mask
+            
                     
 
             # print("After applying mask:")
