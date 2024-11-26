@@ -10,7 +10,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.join(os.getcwd(), "peft/src/"))
 from peft import get_peft_model_state_dict, set_peft_model_state_dict
-#from peft import get_peft_model_state_dict, set_peft_model_state_dict
+from adalora import AdaptiveLoRAConfig
 from tqdm import tqdm
 import os
 import numpy as np
@@ -41,7 +41,7 @@ def run_evaluation(gpuid, model_p_or_n, model_path, results_path,round_num):
 # 禁用 Hugging Face Hub 上传和下载
 os.environ["HF_HUB_OFFLINE"] = "1"
 
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 # 设置随机种子
 seed = 42  # 任意固定值
 random.seed(seed)
@@ -87,124 +87,9 @@ def cosine_learning_rate(current_round, total_rounds, initial_lr=0.001, min_lr=0
     return cosine_lr
 
 
-# def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this_round):
-#     sample_this_round = sum([sample_num_list[client] for client in clients_this_round])
-
-
-
-#     for key in global_dict.keys():
-#         global_dict[key] = sum([local_dict_list[client][key] * sample_num_list[client] / sample_this_round for client in clients_this_round])
-    
-#     # # global_auxiliary = None  注释的是一种动量优化的avg算法
-#     # for key in global_dict.keys():
-#     #     delta_w = sum([(local_dict_list[client][key] - global_dict[key]) * sample_num_list[client] / sample_this_round for client in clients_this_round])
-#     #     proxy_dict[key] = args.fedopt_beta1 * proxy_dict[key] + (1 - args.fedopt_beta1) * delta_w if round_idx > 0 else delta_w
-#     #     global_dict[key] = global_dict[key] + proxy_dict[key]
-
-#     return global_dict
-
-# def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this_round):
-#     sample_this_round = sum([sample_num_list[client] for client in clients_this_round])
-#     device = next(iter(global_dict.values())).device
-#     print(f"Global model device: {device}")
-    
-
-#     aggregated_diff = {key: torch.zeros_like(value).to(device) for key, value in global_dict.items()}
-    
-#     # 对差异部分进行加权聚合
-#     for client in clients_this_round:
-#         for key in global_dict.keys():
-#             local_tensor = local_dict_list[client][key].to(device)
-#             diff = local_tensor - global_dict[key]
-#             aggregated_diff[key] += diff * sample_num_list[client] / sample_this_round
-    
-#     # 应用聚合后的差异到全局模型
-#     for key in global_dict.keys():
-#         global_dict[key] += aggregated_diff[key]
-
-#     return global_dict
-
-
 import torch
 from torch.nn.functional import normalize
-
-    
-
-# def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_round):
-#     # 归一化权重
-#     weights_array = normalize(
-#         torch.tensor([n_sample_list[client_id] for client_id in clients_this_round], dtype=torch.float32),
-#         p=1, dim=0
-#     )
-#     print("Weights:", weights_array)
-
-#     delta_W_aggregated = {}
-
-#     # 遍历每个客户端的参数
-#     for idx, client_id in enumerate(clients_this_round):
-#         local_dict = local_dict_list[client_id]
-#         if local_dict is None:  # 跳过未初始化的客户端
-#             print(f"Skipping client {client_id} as it has no local weights.")
-#             continue
-
-
-#         for key, value in local_dict.items():
-#             # 仅处理 lora_A 和 lora_B
-#             if "lora_A" in key:
-#                 lora_base_key = key.replace("lora_A.weight", "")
-#                 lora_B_key = f"{lora_base_key}lora_B.weight"
-                
-#                 if lora_B_key in local_dict:
-#                     # 提取 A 和 B
-#                     lora_A = local_dict[key]
-#                     lora_B = local_dict[lora_B_key]
-
-#                     print(f"lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
-
-#                     # 检查 A 和 B 的维度
-#                     if lora_A.shape[0] != lora_B.shape[1]:
-#                         print(f"Warning: Shape mismatch for {lora_base_key}. lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
-#                         continue
-                    
-
-#                     # 检查 ΔW 的维度是否匹配
-#                     try:
-#                         delta_W = torch.matmul(lora_B, lora_A) * float(weights_array[idx])
-#                     except RuntimeError as e:
-#                         print(f"Error during matrix multiplication for {lora_base_key}: {e}")
-#                         continue
-
-
-#                     # 聚合 ΔW
-#                     if lora_base_key in delta_W_aggregated:
-#                         delta_W_aggregated[lora_base_key] += delta_W
-#                     else:
-#                         delta_W_aggregated[lora_base_key] = delta_W
-
-
-#     for lora_base_key, aggregated_delta_W in delta_W_aggregated.items():
-#         # 检查是否有足够的数据进行 SVD
-#         if aggregated_delta_W.shape[0] < 2 or aggregated_delta_W.shape[1] < 2:
-#             print(f"Skipping SVD for {lora_base_key} due to insufficient shape: {aggregated_delta_W.shape}")
-#             continue
-
-#         # 分解 ΔW 为 lora_A 和 lora_B
-#         try:
-#             u, s, v = torch.svd(aggregated_delta_W)
-#             # rank = min(u.size(1), v.size(0))  # 确定 LoRA 的秩
-#             rank = min(u.size(1), v.size(0), aggregated_delta_W.shape[0], aggregated_delta_W.shape[1])
-#             lora_B_new = u[:, :rank] * torch.sqrt(s[:rank])
-#             lora_A_new = (torch.sqrt(s[:rank])[:, None] * v[:, :rank]).t()
-#         except RuntimeError as e:
-#             print(f"Error during SVD for {lora_base_key}: {e}")
-#             continue
-
-#         # 更新到全局模型
-#         global_dict[f"{lora_base_key}lora_A.weight"] = lora_A_new
-#         global_dict[f"{lora_base_key}lora_B.weight"] = lora_B_new
-
-
-#     return global_dict
+        
 
 
 def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_round):
@@ -224,6 +109,7 @@ def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_r
             print(f"Skipping client {client_id} as it has no local weights.")
             continue
 
+
         for key, value in local_dict.items():
             # 仅处理 lora_A 和 lora_B
             if "lora_A" in key:
@@ -235,26 +121,14 @@ def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_r
                     lora_A = local_dict[key]
                     lora_B = local_dict[lora_B_key]
 
-                    print(f"lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
-
-                    # 检查 A 和 B 的维度是否匹配
+                    # 检查 A 和 B 的维度
                     if lora_A.shape[0] != lora_B.shape[1]:
                         print(f"Warning: Shape mismatch for {lora_base_key}. lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
                         continue
                     
-                    # 对 lora_A 和 lora_B 的维度进行动态调整
-                    if lora_B.shape[0] != lora_A.shape[1]:
-                        max_dim = max(lora_B.shape[0], lora_A.shape[1])
-                        lora_A = torch.nn.functional.pad(lora_A, (0, max_dim - lora_A.shape[1]), "constant", 0)
-                        lora_B = torch.nn.functional.pad(lora_B, (0, 0, 0, max_dim - lora_B.shape[0]), "constant", 0)
-                        print(f"Adjusted lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
+                    # 计算 ΔW = A * B
+                    delta_W = torch.matmul(lora_B,lora_A) *float(weights_array[idx])
 
-                    # 检查 ΔW 的维度是否匹配
-                    try:
-                        delta_W = torch.matmul(lora_B, lora_A) * float(weights_array[idx])
-                    except RuntimeError as e:
-                        print(f"Error during matrix multiplication for {lora_base_key}: {e}")
-                        continue
 
                     # 聚合 ΔW
                     if lora_base_key in delta_W_aggregated:
@@ -262,26 +136,17 @@ def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_r
                     else:
                         delta_W_aggregated[lora_base_key] = delta_W
 
+
     for lora_base_key, aggregated_delta_W in delta_W_aggregated.items():
         # 检查是否有足够的数据进行 SVD
         if aggregated_delta_W.shape[0] < 2 or aggregated_delta_W.shape[1] < 2:
             print(f"Skipping SVD for {lora_base_key} due to insufficient shape: {aggregated_delta_W.shape}")
             continue
 
-        # 对 SVD 的矩阵进行调整
-        target_rows = aggregated_delta_W.shape[0]
-        target_cols = aggregated_delta_W.shape[1]
-        max_dim = max(target_rows, target_cols)
-
-        if target_rows < max_dim:
-            aggregated_delta_W = torch.nn.functional.pad(aggregated_delta_W, (0, 0, 0, max_dim - target_rows), "constant", 0)
-        elif target_cols < max_dim:
-            aggregated_delta_W = torch.nn.functional.pad(aggregated_delta_W, (0, max_dim - target_cols), "constant", 0)
-
         # 分解 ΔW 为 lora_A 和 lora_B
         try:
-            aggregated_delta_W=aggregated_delta_W.cpu()
-            u, s, v = torch.linalg.svd(aggregated_delta_W, full_matrices=False)
+            u, s, v = torch.svd(aggregated_delta_W)
+            # rank = min(u.size(1), v.size(0))  # 确定 LoRA 的秩
             rank = min(u.size(1), v.size(0), aggregated_delta_W.shape[0], aggregated_delta_W.shape[1])
             lora_B_new = u[:, :rank] * torch.sqrt(s[:rank])
             lora_A_new = (torch.sqrt(s[:rank])[:, None] * v[:, :rank]).t()
@@ -293,13 +158,13 @@ def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_r
         global_dict[f"{lora_base_key}lora_A.weight"] = lora_A_new
         global_dict[f"{lora_base_key}lora_B.weight"] = lora_B_new
 
+
     return global_dict
 
 
 
 
-
-def FedAvg_NoNoise(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
+def FedAvg_AdaLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
 
     # # ===== Quantize global_dict to float16 to reduce memory usage =====
     # global_dict = {k: v.half() for k, v in global_dict.items()}

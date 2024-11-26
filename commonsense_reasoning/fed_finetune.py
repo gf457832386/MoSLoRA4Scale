@@ -65,6 +65,7 @@ def parse_args():
     parser.add_argument("--target_modules", type=str, nargs="*", help="Target modules for LoRA")
     parser.add_argument("--use_moslora", action="store_true", help="Use MoS LoRA")
     parser.add_argument("--use_scalelora", action="store_true", help="Use ScaleLoRA")
+    parser.add_argument("--use_masklora", action="store_true", help="Use MaskLoRA")
     parser.add_argument("--mask_file", type=str, default="", help="Path to mask file for LoRA")
 
     # New parameters to add  FL
@@ -107,6 +108,7 @@ def train(
         lora_target_modules: List[str] = None,
         use_moslora: bool=False,
         use_scalelora: bool=False,  #add by phoebe
+        use_masklora: bool=False,  #add by phoebe
         mask_file: str="",          #add by phoebe
         # bottleneck adapter hyperparams
         bottleneck_size: int = 256,
@@ -154,6 +156,7 @@ def train(
         f"lora_r: {lora_r}\n"
         f"use_moslora: {use_moslora}\n" #! added
         f"use_scalelora: {use_scalelora}\n" #! added
+        f"use_masklora: {use_masklora}\n" #! added
         f"mask_file: {mask_file}\n" #! added
         f"lora_alpha: {lora_alpha}\n"
         f"lora_dropout: {lora_dropout}\n"
@@ -310,6 +313,7 @@ def train(
             lora_use_mixer=use_moslora, #! added  #启用MoSLoRA！！！!!!
             lora_mask_file=mask_file,  #add by phoebe
             lora_use_scale=use_scalelora,  #add by phoebe
+            lora_use_mask=use_masklora,   #add by phoebe
             target_modules=target_modules,
             lora_dropout=lora_dropout,
             bias="none",

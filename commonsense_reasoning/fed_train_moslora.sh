@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --lora_r $rank \
   --lora_alpha $alpha \
   --use_moslora \
-  --use_scalelora \
+  --use_masklora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
   --num_clients 100 \
