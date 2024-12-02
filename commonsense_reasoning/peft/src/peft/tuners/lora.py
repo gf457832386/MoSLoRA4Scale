@@ -23,6 +23,7 @@ from typing import List, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import random
 from transformers.pytorch_utils import Conv1D
 
 from ..utils import PeftConfig, PeftType, transpose
@@ -30,6 +31,31 @@ from ..utils import PeftConfig, PeftType, transpose
 
 def is_bnb_available():
     return importlib.util.find_spec("bitsandbytes") is not None
+
+def generate_random_matrix(r):
+        # Initialize a zero matrix of size r x r
+        matrix = [[0] * r for _ in range(r)]
+
+        # Set the diagonal elements to 1
+        for i in range(r):
+            matrix[i][i] = 1
+
+        # Calculate the total number of elements excluding the diagonal
+        non_diag_elements = r * r - r
+
+        # Calculate the number of 1s to add randomly to achieve 50% 0s overall
+        ones_needed = (r * r) // 2 - r
+
+        # Create a list of non-diagonal positions
+        non_diag_positions = [(i, j) for i in range(r) for j in range(r) if i != j]
+
+        # Randomly select positions to set as 1
+        selected_positions = random.sample(non_diag_positions, ones_needed)
+        for i, j in selected_positions:
+            matrix[i][j] = 1
+
+        return matrix
+
 
 
 if is_bnb_available():
@@ -339,8 +365,9 @@ class Linear(nn.Linear, LoraLayer):
 
         # 读取掩码文件
         if self.lora_use_mask and self.lora_mask_file is not None:
-            with open(self.lora_mask_file, "r") as f:
-                mask = [list(map(int, line.strip().split())) for line in f]
+            # with open(self.lora_mask_file, "r") as f:
+            #     mask = [list(map(int, line.strip().split())) for line in f]
+            mask=generate_random_matrix(self.r)
             self.mask = torch.tensor(mask, dtype=torch.float32)
         
 
@@ -386,6 +413,7 @@ class Linear(nn.Linear, LoraLayer):
         if fan_in_fan_out:
             self.weight.data = self.weight.data.T
 
+    
     def reset_parameters(self):
         nn.Linear.reset_parameters(self)
         if hasattr(self, "lora_A"):

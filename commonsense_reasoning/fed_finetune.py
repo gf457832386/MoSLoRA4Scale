@@ -222,13 +222,25 @@ def train(
             trust_remote_code=True,
         )
     else:
-        model = AutoModelForCausalLM.from_pretrained(
-            base_model,
-            load_in_8bit=False,
-            torch_dtype=torch.float16,
-            device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
-            trust_remote_code=True,
-        )
+        if base_model=="meta-llama/Llama-3.2-3B":
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model,
+                load_in_8bit=False,
+                torch_dtype=torch.float16,
+                device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+                trust_remote_code=True,
+                rope_scaling={"type": "linear", "factor": 32.0}  # 如果需要 Rope Scaling
+            )
+        
+        else:
+
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model,
+                load_in_8bit=False,
+                torch_dtype=torch.float16,
+                device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+                trust_remote_code=True,
+            )
 
     #============加载分词器==================
     if "llama2" in base_model:
