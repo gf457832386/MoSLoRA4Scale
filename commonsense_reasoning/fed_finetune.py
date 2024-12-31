@@ -63,9 +63,9 @@ def parse_args():
     parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout")
     #parser.add_argument("--lora_target_modules", type=str, nargs="*", help="Target modules for LoRA")
     parser.add_argument("--target_modules", type=str, nargs="*", help="Target modules for LoRA")
-    parser.add_argument("--use_moslora", action="store_true", help="Use MoS LoRA")
-    parser.add_argument("--use_scalelora", action="store_true", help="Use ScaleLoRA")
-    parser.add_argument("--use_masklora", action="store_true", help="Use MaskLoRA")
+    parser.add_argument("--use_moslora", action="store_true", help="Use MoS LoRA")  #使用 A✖AB✖B  训练出一个AB
+    parser.add_argument("--use_scalelora", action="store_true", help="Use ScaleLoRA") 
+    parser.add_argument("--use_masklora", action="store_true", help="Use MaskLoRA") #
     parser.add_argument("--mask_file", type=str, default="", help="Path to mask file for LoRA")
 
     # New parameters to add  FL
@@ -318,11 +318,13 @@ def train(
 
     #=======模型配置===========
     model = prepare_model_for_int8_training(model, use_gradient_checkpointing=use_gradient_checkpointing)
+
+
     if adapter_name == "lora":
         config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            lora_use_mixer=use_moslora, #! added  #启用MoSLoRA！！！!!!
+            lora_use_mixer=use_moslora, #! added  #启用MoSLoRA
             lora_mask_file=mask_file,  #add by phoebe
             lora_use_scale=use_scalelora,  #add by phoebe
             lora_use_mask=use_masklora,   #add by phoebe
@@ -330,6 +332,7 @@ def train(
             lora_dropout=lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
+            lora_mask_client=[[1, 1, 1, 1], [1, 1, 1,1 ], [1, 1, 1, 1], [1, 1, 1, 1]],
         )
 
     model = get_peft_model(model, config)  #!!!加载模型和配置

@@ -1,4 +1,5 @@
 import random
+from typing import Dict, List
 import torch
 import copy
 import subprocess
@@ -125,6 +126,38 @@ def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this
     return global_dict
 
 
+#生成一个秩为r的矩阵
+def generate_random_matrix(r):
+    # Initialize a zero matrix of size r x r
+    matrix = [[0] * r for _ in range(r)]
+
+    # Set the diagonal elements to 1
+    for i in range(r):
+        matrix[i][i] = 1
+
+    # Calculate the number of 1s to add randomly to achieve 50% 0s overall
+    ones_needed = (r * r) // 2 - r
+
+    # Create a list of non-diagonal positions
+    non_diag_positions = [(i, j) for i in range(r) for j in range(r) if i != j]
+
+    # Randomly select positions to set as 1
+    selected_positions = random.sample(non_diag_positions, ones_needed)
+    for i, j in selected_positions:
+        matrix[i][j] = 1
+
+    return matrix
+
+#更新每个客户端的秩为r的mask矩阵
+def update_client_configs(client_ids: List[int], lora_r: int) -> Dict[int, List[List[int]]]:
+    client_configs = {}
+    for client_id in client_ids:
+        # # 动态生成新的 LoRA mask
+        # mask = [[1 if (i * client_id) % 2 == 0 else 0 for i in range(4)] for _ in range(4)]
+        #生成该客户端的训练r矩阵
+        mask = generate_random_matrix(lora_r)
+        client_configs[client_id] = mask
+    return client_configs
 
 def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
 
@@ -135,10 +168,12 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
         clientnum_perround=max(int(fed_args.num_clients*fed_args.train_ratio),1)  #每轮参与训练的客户端数量
         clients_this_round = get_random_clients(fed_args, clientnum_perround,round+1)  #得到客户端id的list
         print(f">> ==================== Round {round+1} : {clients_this_round} ====================")
+        
+        #更新这轮每个client的config
+        round_configs = update_client_configs(clients_this_round,fed_args.lora_r)
 
         # 每轮初始化的局部模型列表，仅包含参与训练的客户端
         local_dict_list = [None] * fed_args.num_clients
-
 
         for client in tqdm(range(fed_args.num_clients)): 
 
@@ -149,6 +184,12 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
 
 
             print(f">> =====Client {client}:")
+
+            #更换model的config里的mask
+            model.config.lora_mask_client=round_configs[client]
+            
+
+            
 
 
             #如果该客户端需要训练，则进行以下步骤,将全局模型参数同步到局部模型里
@@ -211,6 +252,7 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
 
             print(f"Number of samples in train_dataset for client {client}: {len(train_dataloader_list[client].dataset)}")
             print(f"Number of samples in eval_dataset for client {client}: {len(eval_dataloader_list[client].dataset)}")
+
 
 
 

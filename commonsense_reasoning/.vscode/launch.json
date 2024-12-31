@@ -27,7 +27,7 @@
                 "--use_moslora",
                 "--use_masklora",
                 "--target_modules", "[\"q_proj\", \"k_proj\", \"v_proj\", \"up_proj\", \"down_proj\"]",
-                "--fed_alg", "FedAvg_NoNoise",
+                "--fed_alg", "FedAvg",
                 "--num_clients", "1000",
                 "--train_ratio", "0.002",
                 "--data_partition_method", "iid",

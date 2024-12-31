@@ -32,8 +32,8 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --use_masklora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
-  --num_clients 1000 \
-  --train_ratio 0.002 \
+  --num_clients 100 \
+  --train_ratio 0.2 \
   --data_partition_method "iid" \
   --dirichlet_alpha 0.5 \
   --num_rounds 5 \
