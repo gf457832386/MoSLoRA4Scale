@@ -29,14 +29,14 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --lora_r $rank \
   --lora_alpha $alpha \
   --use_moslora \
-  --use_masklora \
+  --use_scalelora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
   --num_clients 100 \
   --train_ratio 0.2 \
   --data_partition_method "iid" \
   --dirichlet_alpha 0.5 \
-  --num_rounds 5 \
+  --num_rounds 15 \
   --save_model_freq 3\
   --results_path $results_path \
   --gpuid $gpuid\
@@ -55,5 +55,5 @@ do
     --base_model $model_p_or_n \
     --lora_weights $model_path \
     --save_dir $results_path \
-    --round_num 10
+    --round_num 15
 done

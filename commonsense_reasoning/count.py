@@ -38,7 +38,7 @@ def process_json_files(directory):
 
 def main():
     # Replace 'your_directory_path' with the path to the directory containing the JSON files
-    directory_path = "/home/hello/gh_Codes/MoSLoRA4Scale/commonsense_reasoning/results/moslora-r4-a32-3e4-GPU0-120215/round_10"
+    directory_path = "/home/hello/gh_Codes/MoSLoRA4Scale/commonsense_reasoning/results/moslora-r4-a32-3e4-GPU0-123111/round_3"
     process_json_files(directory_path)
 
 # Ensure the script only runs when executed directly
