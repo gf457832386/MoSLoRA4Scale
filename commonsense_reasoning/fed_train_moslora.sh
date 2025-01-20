@@ -2,10 +2,10 @@
 
 rank=4
 alpha=32
-gpuid=0
+gpuid=1
 timestamp=$(date +"%m%d%H")
 
-model_p_or_n=openlm-research/open_llama_3b_v2
+model_p_or_n=yahma/llama-7b-hf
 model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
 results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
 
@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --lora_r $rank \
   --lora_alpha $alpha \
   --use_moslora \
-  --use_scalelora \
+  --use_masklora \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
   --fed_alg "FedAvg" \
   --num_clients 100 \

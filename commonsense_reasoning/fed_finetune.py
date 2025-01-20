@@ -2,6 +2,7 @@ import os
 import sys
 from typing import List
 import argparse
+from federated_learning.Alg_FedAvgwithLoss import FedAvgwithLoss
 import fire
 import torch
 import transformers
@@ -17,7 +18,7 @@ from federated_learning import *
 import math
 from federated_learning.Alg_FedAvg import FedAvg
 from federated_learning.Alg_FLoRA import FLoRA
-from federated_learning.Alg_FedAvg_NoNoise import FedAvg_NoNoise
+from federated_learning.Alg_FedAvg_SVD import FedAvg_SVD
 
 
 
@@ -468,8 +469,8 @@ def train(
         FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
     elif fed_args.fed_alg == "FLoRA":
         FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
-    elif fed_args.fed_alg == "FedAvg_NoNoise":
-        FedAvg_NoNoise(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+    elif fed_args.fed_alg == "FedAvg_SVD":
+        FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
 
     #elif补充其他联邦学习算法
 

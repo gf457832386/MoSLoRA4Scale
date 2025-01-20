@@ -5,7 +5,7 @@ import copy
 import subprocess
 import transformers
 #from trl import SFTTrainer
-from transformers import TrainerCallback
+from transformers import TrainerCallback # type: ignore
 import sys
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

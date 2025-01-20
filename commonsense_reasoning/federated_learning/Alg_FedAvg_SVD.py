@@ -331,7 +331,7 @@ def update_client_configs(client_ids: List[int], lora_r: int) -> Dict[int, List[
         client_configs[client_id] = mask
     return client_configs
 
-def FedAvg_NoNoise(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
+def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
 
     # # ===== Quantize global_dict to float16 to reduce memory usage =====
     # global_dict = {k: v.half() for k, v in global_dict.items()}
