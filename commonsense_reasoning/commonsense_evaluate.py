@@ -126,10 +126,10 @@ def main(
             new_data['flag'] = flag
             output_data.append(new_data)
             # 调试输出生成结果
-            # print(f"Instruction: {data['instruction']}")
-            # print(f"Generated Output: {output}")
-            # print(f"Extracted Prediction: {predict}")
-            # print(f"Label: {label}")
+            print(f"Instruction: {data['instruction']}")
+            print(f"Generated Output: {output}")
+            print(f"Extracted Prediction: {predict}")
+            print(f"Label: {label}")
         # print('---------------')
         print(f'\rtest:{idx + 1}/{total} | accuracy {correct}  {correct / current}')
         # print('---------------')

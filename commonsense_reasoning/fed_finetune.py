@@ -2,7 +2,6 @@ import os
 import sys
 from typing import List
 import argparse
-from federated_learning.Alg_FedAvgwithLoss import FedAvgwithLoss
 import fire
 import torch
 import transformers
@@ -11,16 +10,13 @@ from typing import List, Optional, Union
 from data.partition import *
 from arguments import get_args, read_from_json
 import copy
-import os
-
 import numpy as np
 from federated_learning import *
 import math
 from federated_learning.Alg_FedAvg import FedAvg
 from federated_learning.Alg_FLoRA import FLoRA
 from federated_learning.Alg_FedAvg_SVD import FedAvg_SVD
-
-
+from federated_learning.Alg_FedAvg_updateW import FedAvg_updateW
 
 
 
@@ -30,7 +26,7 @@ import torch.nn as nn
 import bitsandbytes as bnb
 """
 sys.path.append(os.path.join(os.getcwd(), "peft/src/"))
-
+# sys.path.insert(0, "/data/b/gaofei/moslora/MoSLoRA4Scale/commonsense_reasoning/peft/src")
 from peft import (  # noqa: E402
     LoraConfig,
     get_peft_model,
@@ -39,6 +35,7 @@ from peft import (  # noqa: E402
     prepare_model_for_int8_training,
 )
 from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer, AutoModel  # noqa: F402
+
 
 print(sys.argv)
 
@@ -67,7 +64,7 @@ def parse_args():
     parser.add_argument("--use_moslora", action="store_true", help="Use MoS LoRA")  #使用 A✖AB✖B  训练出一个AB
     parser.add_argument("--use_scalelora", action="store_true", help="Use ScaleLoRA") 
     parser.add_argument("--use_masklora", action="store_true", help="Use MaskLoRA") #
-    parser.add_argument("--mask_file", type=str, default="", help="Path to mask file for LoRA")
+
 
     # New parameters to add  FL
     parser.add_argument("--fed_alg", type=str, default="FedAvg", help="federated learning method")
@@ -110,7 +107,6 @@ def train(
         use_moslora: bool=False,
         use_scalelora: bool=False,  #add by phoebe
         use_masklora: bool=False,  #add by phoebe
-        mask_file: str="",          #add by phoebe
         # bottleneck adapter hyperparams
         bottleneck_size: int = 256,
         non_linearity: str = "tanh",
@@ -158,7 +154,6 @@ def train(
         f"use_moslora: {use_moslora}\n" #! added
         f"use_scalelora: {use_scalelora}\n" #! added
         f"use_masklora: {use_masklora}\n" #! added
-        f"mask_file: {mask_file}\n" #! added
         f"lora_alpha: {lora_alpha}\n"
         f"lora_dropout: {lora_dropout}\n"
         f"lora_target_modules: {lora_target_modules}\n"
@@ -325,8 +320,7 @@ def train(
         config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
-            lora_use_mixer=use_moslora, #! added  #启用MoSLoRA
-            lora_mask_file=mask_file,  #add by phoebe
+            lora_use_mixer=use_moslora, #added  #启用MoSLoRA
             lora_use_scale=use_scalelora,  #add by phoebe
             lora_use_mask=use_masklora,   #add by phoebe
             target_modules=target_modules,
@@ -387,27 +381,9 @@ def train(
         val_data = None
 
 
-    # #检查input_ids的生成
-    # # 迭代检查 train_data 中的每个样本，确认 `input_ids` 存在且非空
-    # for i, data_point in enumerate(train_data):
-    #     if "input_ids" not in data_point or len(data_point["input_ids"]) == 0:
-    #         print(f"Error: No input_ids in train_data sample {i}")
-    #     # else:
-    #     #     print(f"Sample {i} input_ids:", data_point["input_ids"])
-
-    # # 对 val_data 进行类似检查
-    # if val_data:
-    #     for i, data_point in enumerate(val_data):
-    #         if "input_ids" not in data_point or len(data_point["input_ids"]) == 0:
-    #             print(f"Error: No input_ids in val_data sample {i}")
-    #         # else:
-    #         #     print(f"Sample {i} input_ids:", data_point["input_ids"])
-
 
 
     #=========数据集切分到客户端clients============
-    # train_dataset = load_and_cache_data(fed_args, tokenizer, data_type='train')  #data_lodar文件
-    # eval_dataset = load_and_cache_data(fed_args, tokenizer, data_type='dev')
     train_dataloader_list, eval_dataloader_list, n_sample_list = partition(fed_args, train_data, val_data)
     
     w_sum = sum(n_sample_list)  #计算所有客户端的数据样本总和
@@ -429,6 +405,7 @@ def train(
 
 
     old_state_dict = model.state_dict
+
     model.state_dict = (
         lambda self, *_, **__: get_peft_model_state_dict(
             self, old_state_dict()
@@ -438,23 +415,31 @@ def train(
     # if torch.__version__ >= "2" and sys.platform != "win32":
     #     model = torch.compile(model)
 
+
+
+    # 使用原始的 state_dict 方法提取基础权重
+    base_weights = old_state_dict()
+    print("Base model weights keys:", base_weights.keys())
+
+ 
+
     #========定义全局模型与局部模型==========
-    print(f"准备copyglobal_dict")
-    global_dict = copy.deepcopy(get_peft_model_state_dict(model))
-    print(f"global_dict")
+    print(f"准备copyglobal_dict") 
+    global_dict = copy.deepcopy(get_peft_model_state_dict(model))  #这是初始化后的A,AB,B矩阵
+    # print(f"global_dict")
     print(global_dict)
     # local_dict_list = [copy.deepcopy(global_dict) for i in range(fed_args.num_clients)]
 
     #========开始联邦学习============
     training_loss = [[] for i in range(fed_args.num_clients)]  #创建一个空列表，来记录该客户端在每一轮的训练损失
 
-    # sample_input = "This is a test sentence"
-    # encoded_input = tokenizer(sample_input, return_tensors="pt")
+    sample_input = "This is a test sentence"
+    encoded_input = tokenizer(sample_input, return_tensors="pt")
 
-    # if "input_ids" not in encoded_input or len(encoded_input["input_ids"]) == 0:
-    #     print("Error: Tokenizer did not generate input_ids correctly.")
-    # else:
-    #     print(f"Encoded input: {encoded_input}")
+    if "input_ids" not in encoded_input or len(encoded_input["input_ids"]) == 0:
+        print("Error: Tokenizer did not generate input_ids correctly.")
+    else:
+        print(f"Encoded input: {encoded_input}")
 
     device = torch.device("cuda")
     set_peft_model_state_dict(model, global_dict)
@@ -471,6 +456,8 @@ def train(
         FLoRA(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
     elif fed_args.fed_alg == "FedAvg_SVD":
         FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
+    elif fed_args.fed_alg == "FedAvg_updateW":
+        FedAvg_updateW(fed_args,model,global_dict,base_weights,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint)
 
     #elif补充其他联邦学习算法
 

@@ -113,7 +113,7 @@ class LoraConfig(PeftConfig):
     lora_use_mixer: bool=field(default=False, metadata={"help": "whether to use mixer"})
     lora_use_scale: bool=field(default=False, metadata={"help": "whether to use scale*AB"})
     lora_use_mask: bool=field(default=False, metadata={"help": "whether to use mask=AB"})
-    lora_mask_file: str = field(default='', metadata={"help": "Path to the mask file for LoRA layers"}) # add by phoebe
+    # lora_mask_file: str = field(default='', metadata={"help": "Path to the mask file for LoRA layers"}) # add by phoebe
     lora_mask_client: Optional[List[List[int]]] = field(
         default=None, metadata={"help": "Client-specific mask for LoRA"}
     )
@@ -182,7 +182,7 @@ class LoraModel(torch.nn.Module):
             "lora_use_mixer": self.peft_config.lora_use_mixer,
             "lora_use_scale": self.peft_config.lora_use_scale,  #是否AB*掩码矩阵
             "lora_use_mask": self.peft_config.lora_use_mask,  #是否AB=掩码矩阵
-            "lora_mask_file":self.peft_config.lora_mask_file, #自适应掩码矩阵路径
+            # "lora_mask_file":self.peft_config.lora_mask_file, #自适应掩码矩阵路径
             "lora_mask_client": self.peft_config.lora_mask_client, #每个客户端定制的掩码
         }
         key_list = [key for key, _ in self.model.named_modules()]
@@ -350,7 +350,7 @@ class Linear(nn.Linear, LoraLayer):
         lora_use_mixer: bool=False,
         lora_use_scale: bool=False,
         lora_use_mask:bool=False,
-        lora_mask_file: str=None,
+        # lora_mask_file: str=None,
         lora_mask_client: Optional[List[List[int]]] = None,
 
         **kwargs,
@@ -363,25 +363,6 @@ class Linear(nn.Linear, LoraLayer):
         self.lora_use_scale = lora_use_scale
         self.lora_use_mask = lora_use_mask
         
-        # if self.lora_use_scale: #保存mask_file参数
-        #     self.lora_mask_file = lora_mask_client
-
-        # if self.lora_use_mask: #保存mask_file参数
-        #     self.lora_mask_file = lora_mask_file
-        
-
-        # # 读取掩码文件
-        # if self.lora_use_scale and self.lora_mask_file is not None:
-        #     with open(self.lora_mask_file, "r") as f:
-        #         mask = [list(map(int, line.strip().split())) for line in f]
-        #     self.mask = torch.tensor(mask, dtype=torch.float32)
-
-        # # 读取掩码文件
-        # if self.lora_use_mask and self.lora_mask_file is not None:
-        #     # with open(self.lora_mask_file, "r") as f:
-        #     #     mask = [list(map(int, line.strip().split())) for line in f]
-        #     mask=generate_random_matrix(self.r)
-        #     self.mask = torch.tensor(mask, dtype=torch.float32)
         
 
         self.mask=torch.tensor(lora_mask_client, dtype=torch.float32)

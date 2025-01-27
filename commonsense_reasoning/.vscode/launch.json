@@ -13,7 +13,6 @@
             "args": [
                 "--base_model", "openlm-research/open_llama_3b_v2",
                 "--data_path", "ft-training_set/commonsense_170k.json",
-                "--mask_file", "peft/src/peft/tuners/connectWeight0.txt",
                 "--output_dir", "trained_models/debug",
                 "--batch_size", "16",
                 "--micro_batch_size", "4",
@@ -27,19 +26,19 @@
                 "--use_moslora",
                 "--use_scalelora",
                 "--target_modules", "[\"q_proj\", \"k_proj\", \"v_proj\", \"up_proj\", \"down_proj\"]",
-                "--fed_alg", "FedAvgwithLoss",
+                "--fed_alg", "FedAvg_updateW", 
                 "--num_clients", "1000",
                 "--train_ratio", "0.002",
                 "--data_partition_method", "iid",
                 "--dirichlet_alpha", "0.5",
                 "--num_rounds","3",
-                "--save_model_freq", "2" ,
+                "--save_model_freq", "1" ,
                 "--results_path","results/debug",
-                "--gpuid", "0",
+                "--gpuid", "3",
              
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0"
+                "CUDA_VISIBLE_DEVICES": "3"
             },
             "console": "integratedTerminal",
             "justMyCode": true

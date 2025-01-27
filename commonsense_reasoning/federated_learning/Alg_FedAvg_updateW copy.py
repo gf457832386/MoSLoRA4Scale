@@ -5,18 +5,16 @@ import copy
 import subprocess
 import transformers
 #from trl import SFTTrainer
-from transformers import TrainerCallback
+from transformers import TrainerCallback # type: ignore
 import sys
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.join(os.getcwd(), "peft/src/"))
 from peft import get_peft_model_state_dict, set_peft_model_state_dict
-#from peft import get_peft_model_state_dict, set_peft_model_state_dict
 from tqdm import tqdm
 import os
 import numpy as np
 import math
-
 
 
 def run_evaluation(gpuid, model_p_or_n, model_path, results_path,round_num):
@@ -39,7 +37,6 @@ def run_evaluation(gpuid, model_p_or_n, model_path, results_path,round_num):
         ]
         # 使用 subprocess 调用命令
         subprocess.run(" ".join(cmd), shell=True)
-
 
 # 禁用 Hugging Face Hub 上传和下载
 os.environ["HF_HUB_OFFLINE"] = "1"
@@ -64,6 +61,7 @@ def get_random_clients(fed_args, clientnum_perround,current_round):
 
 
 
+
 def cosine_learning_rate(current_round, total_rounds, initial_lr=0.001, min_lr=0):
     """
     Compute the learning rate based on a cosine schedule.
@@ -80,92 +78,130 @@ def cosine_learning_rate(current_round, total_rounds, initial_lr=0.001, min_lr=0
 
 
 
-import torch
-from torch.nn.functional import normalize
+def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this_round,fed_args):
+    sample_this_round = sum([sample_num_list[client] for client in clients_this_round])
+    device = next(iter(global_dict.values())).device
+    print(f"Global model device: {device}")
+
+    # 初始化全局权重的增量
+    weighted_single_weights = {key: torch.zeros_like(value).to(device) for key, value in global_dict.items()}
 
 
-#SVD分解
-def global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_round,fed_args):
-    # 归一化权重
-    weights_array = normalize(
-        torch.tensor([n_sample_list[client_id] for client_id in clients_this_round], dtype=torch.float32),
-        p=1, dim=0
-    )
-    print("Weights:", weights_array)
+    for k, client in enumerate(clients_this_round):
+        #先提取这个客户端的所有权重
+        local_client_weight = local_dict_list[client]
+        for key in local_client_weight.keys():
+            print(f"key: {key}")
+            single_weights = local_client_weight[key].to(device)
 
-    delta_W_aggregated = {}
+            if fed_args.use_moslora==True:
+            
 
-    # 遍历每个客户端的参数
-    for idx, client_id in enumerate(clients_this_round):
-        local_dict = local_dict_list[client_id]
-        if local_dict is None:  # 跳过未初始化的客户端
-            print(f"Skipping client {client_id} as it has no local weights.")
-            continue
+                if k==0:  #第一个客户端
+                    if single_weights.shape[0] == fed_args.lora_r and "A" in key and "AB" not in key:
 
-        for key, value in local_dict.items():
-            # 仅处理 lora_A 和 lora_B
-            if "lora_A" in key and "AB" not in key:
-                #名字
-                lora_base_key = key.replace("lora_A.weight", "")
-                lora_B_key = f"{lora_base_key}lora_B.weight"
-                lora_AB_key = f"{lora_base_key}lora_AB.weight"
+                        #将AB和A相乘生成新的A
 
-                # 提取 A 和 B
-                lora_A = local_dict[key]
-                lora_B = local_dict[lora_B_key]
-                lora_AB = local_dict[lora_AB_key]
+                        AB_key = key.replace("lora_A", "lora_AB")
+                        single_weights=torch.matmul(local_client_weight[AB_key],single_weights)
+                        weighted_single_weights[key] = single_weights * (sample_num_list[client] / sample_this_round)
+                        
+                    # 对 B 矩阵的拼接
+                    if single_weights.shape[1] == fed_args.lora_r and "B" in key and "AB" not in key:
+                        weighted_single_weights[key] = single_weights * (sample_num_list[client] / sample_this_round)
 
-                # print(f"lora_A: {lora_A.shape},lora_AB: {lora_AB.shape}, lora_B: {lora_B.shape}")
 
-                # 检查 A 和 B 的维度是否匹配
-                if lora_A.shape[0] != lora_B.shape[1]:
-                    print(f"Warning: Shape mismatch for {lora_base_key}. lora_A: {lora_A.shape}, lora_B: {lora_B.shape}")
-                    continue
+                else: #后续的客户端
+                    # print(f"weighted_single_weights[{key}].shape: {weighted_single_weights[key].shape}")
+                    # print(f"single_weights.shape: {single_weights.shape}")
 
-                # 计算权重后的 ΔW
-                try:
-                    delta_W = torch.matmul(lora_B, torch.matmul(lora_AB, lora_A)) * float(weights_array[idx])
-                except RuntimeError as e:
-                    print(f"Error during matrix multiplication for {lora_base_key}: {e}")
-                    continue
+                    # 对 A 矩阵的拼接
+                    if single_weights.shape[0] == fed_args.lora_r and "A" in key and "AB" not in key:
 
-                # 聚合 ΔW
-                if lora_base_key in delta_W_aggregated:
-                    delta_W_aggregated[lora_base_key] += delta_W
-                else:
-                    delta_W_aggregated[lora_base_key] = delta_W
+                        #将AB和A相乘生成新的A
 
-    for lora_base_key, aggregated_delta_W in delta_W_aggregated.items():
-        # 检查是否有足够的数据进行 SVD
-        if aggregated_delta_W.shape[0] < 2 or aggregated_delta_W.shape[1] < 2:
-            print(f"Skipping SVD for {lora_base_key} due to insufficient shape: {aggregated_delta_W.shape}")
-            continue
+                        AB_key = key.replace("lora_A", "lora_AB")
+                        single_weights=torch.matmul(local_client_weight[AB_key],single_weights)
 
-        # 使用 PyTorch 进行 SVD 分解
-        try:
-            aggregated_delta_W = aggregated_delta_W.to("cuda")  # 确保在 GPU 上计算
-            U, S, Vt = torch.linalg.svd(aggregated_delta_W, full_matrices=False)
+                        weighted_single_weights[key] = torch.cat(
+                            [weighted_single_weights[key],
+                            single_weights * (sample_num_list[client] / sample_this_round)],
+                            dim=0
+                        )
+                    # 对 B 矩阵的拼接
+                    if single_weights.shape[1] == fed_args.lora_r and "B" in key and "AB" not in key:
+                        weighted_single_weights[key] = torch.cat(
+                            [weighted_single_weights[key], single_weights* (sample_num_list[client] / sample_this_round)],
+                            dim=1
+                        )
+            else:
+                if k==0:  #第一个客户端
+                    if single_weights.shape[0] == fed_args.lora_r and "A" in key and "AB" not in key:
 
-            # 截断 SVD 结果
-            rank = fed_args.lora_r
-            U = U[:, :rank]
-            S = S[:rank]
-            Vt = Vt[:rank, :]
+                        weighted_single_weights[key] = single_weights * (sample_num_list[client] / sample_this_round)
+                        
+                    # 对 B 矩阵的拼接
+                    if single_weights.shape[1] == fed_args.lora_r and "B" in key and "AB" not in key:
+                        weighted_single_weights[key] = single_weights * (sample_num_list[client] / sample_this_round)
 
-            # 计算新的 lora_A 和 lora_B
-            lora_B_new = U @ torch.diag(S)
-            lora_A_new = Vt
 
-        except RuntimeError as e:
-            print(f"Error during SVD for {lora_base_key}: {e}")
-            continue
+                else: #后续的客户端
 
-        # 更新到全局模型
-        global_dict[f"{lora_base_key}lora_A.weight"] = lora_A_new.cpu()
-        global_dict[f"{lora_base_key}lora_B.weight"] = lora_B_new.cpu()
 
-    return global_dict
+                    # 对 A 矩阵的拼接
+                    if single_weights.shape[0] == fed_args.lora_r and "A" in key and "AB" not in key:
 
+                        weighted_single_weights[key] = torch.cat(
+                            [weighted_single_weights[key],
+                            single_weights * (sample_num_list[client] / sample_this_round)],
+                            dim=0
+                        )
+                    # 对 B 矩阵的拼接
+                    if single_weights.shape[1] == fed_args.lora_r and "B" in key and "AB" not in key:
+                        weighted_single_weights[key] = torch.cat(
+                            [weighted_single_weights[key], single_weights* (sample_num_list[client] / sample_this_round)],
+                            dim=1
+                        )
+
+                
+    # 返回加权和拼接后的结果
+    return weighted_single_weights
+                
+                
+def update_base_weights(weighted_single_weights,base_weights):
+    
+
+    # 遍历每个 LoRA 权重的键 (A, B), AB已经与A相乘成为了新的A'
+    for key in weighted_single_weights.keys():
+        if "lora_A" in key and "AB" not in key:
+            # 对应的 B 矩阵
+            b_key = key.replace("lora_A", "lora_B")
+
+            #找到对应的基础权重的键
+            base_key = key.replace("lora_A.weight", "weight")
+
+            A_matrix = weighted_single_weights[key]
+            B_matrix = weighted_single_weights[b_key]
+
+             # 计算增量权重 ΔW = A' * B
+            delta_weight = torch.matmul(B_matrix,A_matrix) 
+
+             # 检查 ΔW 和基础权重的形状是否匹配
+            if delta_weight.shape != base_weights[base_key].shape:
+                raise ValueError(f"Shape mismatch: ΔW {delta_weight.shape} and base weight {base_weights[base_key].shape}")
+            
+            print(f"base_key: {base_key}")
+            print(f"base_weights[base_key]before: {base_weights[base_key]}")
+
+            # 更新基础权重
+            learning_rate=1
+            base_weights[base_key] += learning_rate*delta_weight
+            print(f"delta_weight mean: {delta_weight.mean().item()}, std: {delta_weight.std().item()}, max: {delta_weight.max().item()}, min: {delta_weight.min().item()}")
+
+
+            print(f"base_weights[base_key]after: {base_weights[base_key]}")
+
+    return base_weights
 
 
 #生成一个秩为r的矩阵
@@ -190,7 +226,6 @@ def generate_random_matrix(r):
 
     return matrix
 
-
 #更新每个客户端的秩为r的mask矩阵
 def update_client_configs(client_ids: List[int], lora_r: int) -> Dict[int, List[List[int]]]:
     client_configs = {}
@@ -202,29 +237,27 @@ def update_client_configs(client_ids: List[int], lora_r: int) -> Dict[int, List[
         client_configs[client_id] = mask
     return client_configs
 
-def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
-
-    
-    set_peft_model_state_dict(model, global_dict)
-    model.save_pretrained(fed_args.output_dir)  #保存微调模型
-    print(f"== Performing evaluation after round {1} ==")
-    run_evaluation(fed_args.gpuid, fed_args.base_model, fed_args.output_dir, fed_args.results_path,1)
-
+def FedAvg_updateW(fed_args,model,global_dict,base_weights,training_loss,tokenizer,train_dataloader_list, eval_dataloader_list, n_sample_list,use_wandb, gradient_accumulation_steps,wandb_run_name,resume_from_checkpoint):
 
     # # ===== Quantize global_dict to float16 to reduce memory usage =====
     # global_dict = {k: v.half() for k, v in global_dict.items()}
+    # 初始化全局权重
 
     for round in tqdm(range(fed_args.num_rounds)): #轮循环
         clientnum_perround=max(int(fed_args.num_clients*fed_args.train_ratio),1)  #每轮参与训练的客户端数量
         clients_this_round = get_random_clients(fed_args, clientnum_perround,round+1)  #得到客户端id的list
         print(f">> ==================== Round {round+1} : {clients_this_round} ====================")
-
+        
         #更新这轮每个client的config
         round_configs = update_client_configs(clients_this_round,fed_args.lora_r)
 
+        # #更新基础大模型
+        # for key, value in base_weights.items():
+        #     if key in model.state_dict():
+        #         model.state_dict()[key].data.copy_(value)
+
         # 每轮初始化的局部模型列表，仅包含参与训练的客户端
         local_dict_list = [None] * fed_args.num_clients
-
 
         for client in tqdm(range(fed_args.num_clients)): 
 
@@ -238,19 +271,19 @@ def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataload
 
             #更换model的config里的mask
             model.config.lora_mask_client=round_configs[client]
-
-
+            
             #如果该客户端需要训练，则进行以下步骤,将全局模型参数同步到局部模型里
-            set_peft_model_state_dict(model, global_dict)   # sync the global model to the local model
+            # set_peft_model_state_dict(model, global_dict)   # sync the global model to the local model
+            set_peft_model_state_dict(model, base_weights)  
             # 检查提取的参数是否为空
             peft_state_dict = get_peft_model_state_dict(model)
-
+            print("peft_state_dict.keys():")
+            print(peft_state_dict.keys())
             if not peft_state_dict:
                 print(f"Error: Failed to extract PEFT model state dictionary for client {client}")
 
-      
+
             new_lr = cosine_learning_rate(round, fed_args.num_rounds, fed_args.learning_rate, 1e-6)      # manually schedule the learning rate
-        
 
 
             # ===== Train local model on the client side =====
@@ -292,15 +325,27 @@ def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataload
 
 
 
+
             results = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
             training_loss[client].append(results.training_loss)  
+            
 
-            local_dict_list[client] = {k: v.detach().clone() for k, v in get_peft_model_state_dict(model).items()}
+            
+
+            # ===== Client transmits local information to server =====
+            # 仅存储本轮训练后的模型差异部分
+            # local_dict_list[client] = {k: v.detach().clone() for k, v in get_peft_model_state_dict(model).items()}
+
+            # #存储新的model
+            local_dict_list[client] = copy.deepcopy(get_peft_model_state_dict(model))   # copy is needed!
 
 
         # ===== Server aggregates the local models =====
-        global_dict= global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_round,fed_args)
-
+        #返回拼接的多个A矩阵和B矩阵
+        weighted_single_weights= global_aggregate(global_dict, local_dict_list, n_sample_list, clients_this_round,fed_args)
+        #更新基础权重
+        base_weights= update_base_weights(weighted_single_weights,base_weights)
+        
 
         print("Global model parameters after aggregation:") #每轮训练完检测下global_dict是不是有更新
         for key, value in global_dict.items():
@@ -310,15 +355,14 @@ def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataload
 
         print("Running post-training validation...")
         device = torch.device("cuda")
-        set_peft_model_state_dict(model, global_dict)
+        set_peft_model_state_dict(model, base_weights)
         test_prompt = "Please choose the correct answer: Which color is the sky? answer1: blue, answer2: red"
         inputs = tokenizer(test_prompt, return_tensors="pt").to(device)
         outputs = model.generate(input_ids=inputs["input_ids"], max_new_tokens=32)
         generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         print(f"Post-training output: {generated_text}")
-       
 
-        
+
 
         # ===== Save the model（中间检查点） =====
         if (round+1) % fed_args.save_model_freq == 0:
@@ -327,18 +371,17 @@ def FedAvg_SVD(fed_args,model,global_dict,training_loss,tokenizer,train_dataload
             trainer.save_model(model_save_path)            
             # trainer.save_model(os.path.join(fed_args.output_dir, f"checkpoint-{round+1}"))
         
+        # 保存训练损失
+      
+        print(f"Training loss: {training_loss}")
         np.save(os.path.join(fed_args.output_dir, "training_loss.npy"), np.array(training_loss))
-
-
-
-
-
 
 
 
          # 每训练 3 轮执行一次评估
         if (round + 1) % 1 == 0:
-            set_peft_model_state_dict(model, global_dict)
+            # set_peft_model_state_dict(model, global_dict)
+            set_peft_model_state_dict(model, base_weights)
             model.save_pretrained(fed_args.output_dir)  #保存微调模型
             print(f"== Performing evaluation after round {round + 1} ==")
             run_evaluation(fed_args.gpuid, fed_args.base_model, fed_args.output_dir, fed_args.results_path,round + 1)

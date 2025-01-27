@@ -2,10 +2,10 @@
 
 rank=4
 alpha=32
-gpuid=1
-timestamp=$(date +"%m%d%H")
+gpuid=0
+timestamp=$(date +"%m%d%H%M")
 
-model_p_or_n=yahma/llama-7b-hf
+model_p_or_n=openlm-research/open_llama_3b_v2
 model_path=trained_models/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
 results_path=results/moslora-r$rank-a$alpha-3e4-GPU$gpuid-$timestamp
 
@@ -17,7 +17,6 @@ export CUDA_VISIBLE_DEVICES=$gpuid
 CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --base_model $model_p_or_n \
   --data_path 'ft-training_set/commonsense_170k.json' \
-  --mask_file "peft/src/peft/tuners/connectWeight${gpuid}.txt" \
   --output_dir $model_path \
   --batch_size 16 \
   --micro_batch_size 4 \
@@ -26,12 +25,12 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   --cutoff_len 256 \
   --val_set_size 120 \
   --adapter_name lora \
-  --lora_r $rank \
-  --lora_alpha $alpha \
   --use_moslora \
   --use_masklora \
+  --lora_r $rank \
+  --lora_alpha $alpha \
   --target_modules "["q_proj", "k_proj", "v_proj", "up_proj", "down_proj"]" \
-  --fed_alg "FedAvg" \
+  --fed_alg "FedAvg_SVD" \
   --num_clients 100 \
   --train_ratio 0.2 \
   --data_partition_method "iid" \
@@ -45,7 +44,8 @@ CUDA_VISIBLE_DEVICES=$gpuid python -u fed_finetune.py \
   
 
 
-for ds in ARC-Easy openbookqa social_i_qa ARC-Challenge winogrande piqa boolq hellaswag
+# for ds in ARC-Easy openbookqa social_i_qa ARC-Challenge winogrande piqa boolq hellaswag
+for ds in ARC-Easy ARC-Challenge 
 do
   CUDA_VISIBLE_DEVICES=$gpuid python -u commonsense_evaluate.py \
     --model LLaMA3 \

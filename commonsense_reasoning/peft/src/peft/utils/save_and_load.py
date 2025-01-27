@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 from .config import PeftType
 
 
@@ -87,6 +88,14 @@ def set_peft_model_state_dict(model, peft_model_state_dict):
         model ([`PeftModel`]): The Peft model.
         peft_model_state_dict (`dict`): The state dict of the Peft model.
     """
+
+    # # 打印检查点中每个权重的名称和形状
+    # print("Loading the following weights from checkpoint:")
+    # for key, value in peft_model_state_dict.items():
+    #     if isinstance(value, torch.Tensor):  # 检查是否为张量
+    #         print(f"{key}: {value.shape}")
+    #     else:
+    #         print(f"{key}: Non-tensor value")
 
     model.load_state_dict(peft_model_state_dict, strict=False)
     if model.peft_config.peft_type != PeftType.LORA and model.peft_config.peft_type != PeftType.BOTTLENECK:

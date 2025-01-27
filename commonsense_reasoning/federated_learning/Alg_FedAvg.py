@@ -61,17 +61,6 @@ def get_random_clients(fed_args, clientnum_perround,current_round):
     return clients_this_round
 
 
-# # 模型聚合
-# def aggregate_global_model(client_weights):
-#     global_dict = copy.deepcopy(client_weights[0])
-    
-#     # 聚合所有客户端模型权重 (这里用FedAvg)
-#     for key in global_dict.keys():
-#         for i in range(1, len(client_weights)):
-#             global_dict[key] += client_weights[i][key]
-#         global_dict[key] = torch.div(global_dict[key], len(client_weights))
-    
-#     return global_dict
 
 def cosine_learning_rate(current_round, total_rounds, initial_lr=0.001, min_lr=0):
     """
@@ -88,21 +77,6 @@ def cosine_learning_rate(current_round, total_rounds, initial_lr=0.001, min_lr=0
     return cosine_lr
 
 
-# def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this_round):
-#     sample_this_round = sum([sample_num_list[client] for client in clients_this_round])
-
-
-
-#     for key in global_dict.keys():
-#         global_dict[key] = sum([local_dict_list[client][key] * sample_num_list[client] / sample_this_round for client in clients_this_round])
-    
-#     # # global_auxiliary = None  注释的是一种动量优化的avg算法
-#     # for key in global_dict.keys():
-#     #     delta_w = sum([(local_dict_list[client][key] - global_dict[key]) * sample_num_list[client] / sample_this_round for client in clients_this_round])
-#     #     proxy_dict[key] = args.fedopt_beta1 * proxy_dict[key] + (1 - args.fedopt_beta1) * delta_w if round_idx > 0 else delta_w
-#     #     global_dict[key] = global_dict[key] + proxy_dict[key]
-
-#     return global_dict
 
 def global_aggregate(global_dict, local_dict_list, sample_num_list, clients_this_round):
     sample_this_round = sum([sample_num_list[client] for client in clients_this_round])
@@ -310,7 +284,7 @@ def FedAvg(fed_args,model,global_dict,training_loss,tokenizer,train_dataloader_l
 
 
          # 每训练 3 轮执行一次评估
-        if (round + 1) % 3 == 0:
+        if (round + 1) % 1 == 0:
             set_peft_model_state_dict(model, global_dict)
             model.save_pretrained(fed_args.output_dir)  #保存微调模型
             print(f"== Performing evaluation after round {round + 1} ==")
